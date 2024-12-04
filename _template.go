@@ -20,7 +20,7 @@ var Day = runner.DayImplementation{
 
 func DayPart1(logger *slog.Logger, input string) (string, any) {
 
-	return ""
+	return "", nil
 }
 
 func DayPart2(logger *slog.Logger, input string, part1Context any) string {

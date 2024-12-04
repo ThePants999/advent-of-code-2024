@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"regexp"
 	"strconv"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
@@ -165,4 +166,29 @@ func Day3Part2(logger *slog.Logger, input string, part1Context any) string {
 	}
 
 	return strconv.Itoa(sum)
+}
+
+// Alternative regex-based implementations, unused
+
+func Day3Part1_Regex(logger *slog.Logger, input string) (string, any) {
+	sum := 0
+	r, _ := regexp.Compile(`mul\((\d+),(\d+)\)`)
+	matches := r.FindAllStringSubmatch(input, -1)
+	for _, match := range matches {
+		operand1, _ := strconv.Atoi(match[1])
+		operand2, _ := strconv.Atoi(match[2])
+		sum += (operand1 * operand2)
+	}
+	return strconv.Itoa(sum), nil
+}
+
+func Day3Part2_Regex(logger *slog.Logger, input string, _ any) string {
+	// This doesn't work - gets the right answer with the example
+	// but the wrong answer with the real data. Upon determining that
+	// it's 10x slower than the manual parsing above anyway, I couldn't be
+	// bothered to debug.
+	r, _ := regexp.Compile(`don't\(\).*?($|do\(\))`)
+	input = r.ReplaceAllString(input, "")
+	result, _ := Day3Part1_Regex(logger, input)
+	return result
 }

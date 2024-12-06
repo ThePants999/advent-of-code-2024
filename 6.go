@@ -50,10 +50,12 @@ type gridLocationState struct {
 }
 
 type d6context struct {
-	obstacles posSet
-	basePath  [][]gridLocationState
-	startRow  int
-	startCol  int
+	obstacles          posSet
+	obstacleCandidates posSet
+	startRow           int
+	startCol           int
+	numRows            int
+	numCols            int
 }
 
 func Day6Part1(logger *slog.Logger, input string) (string, any) {
@@ -75,50 +77,36 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	numRows, numCols := len(grid), len(grid[0])
 	curRow, curCol := startRow, startCol
+	obstacleCandidates := mapset.NewSet[gridPos]()
 	visitedCount := 1
 	for {
 		var inBounds bool
-		curRow, curCol, dir, inBounds = move(obstacles, curRow, curCol, len(grid), len(grid[curRow]), dir)
+		curRow, curCol, dir, inBounds = move(obstacles, curRow, curCol, numRows, numCols, dir)
 		if !inBounds {
 			break
 		}
 		if !grid[curRow][curCol].visited {
+			obstacleCandidates.Add(gridPos{curRow, curCol})
 			visitedCount++
 			grid[curRow][curCol].visited = true
 		}
 		grid[curRow][curCol].visitedDirs[dir] = true
 	}
+	obstacleCandidates.Remove(gridPos{startRow, startCol})
 
-	context := d6context{
-		obstacles: obstacles,
-		basePath:  grid,
-		startRow:  startRow,
-		startCol:  startCol,
-	}
-
-	return strconv.Itoa(visitedCount), context
+	return strconv.Itoa(visitedCount), d6context{obstacles, obstacleCandidates, startRow, startCol, numRows, numCols}
 }
 
 func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d6context)
-	candidates := mapset.NewSet[gridPos]()
-	numRows, numCols := len(context.basePath), len(context.basePath[0])
-
-	for rowIx, row := range context.basePath {
-		for colIx, locState := range row {
-			if locState.visited {
-				addCandidates(candidates, context.obstacles, rowIx, colIx, numRows, numCols, locState.visitedDirs)
-			}
-		}
-	}
-	candidates.Remove(gridPos{context.startRow, context.startCol})
 
 	loopCount := 0
-	for _, candidate := range candidates.ToSlice() {
-		grid := make([][]gridLocationState, numRows)
-		for i := 0; i < len(context.basePath[0]); i++ {
-			grid[i] = make([]gridLocationState, numCols)
+	for _, candidate := range context.obstacleCandidates.ToSlice() {
+		grid := make([][]gridLocationState, context.numRows)
+		for i := 0; i < context.numRows; i++ {
+			grid[i] = make([]gridLocationState, context.numCols)
 		}
 		curRow, curCol, dir := context.startRow, context.startCol, D6_UP
 		grid[curRow][curCol].visitedDirs[D6_UP] = true
@@ -127,7 +115,7 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 
 		for {
 			var inBounds bool
-			curRow, curCol, dir, inBounds = move(context.obstacles, curRow, curCol, len(grid), len(grid[curRow]), dir)
+			curRow, curCol, dir, inBounds = move(context.obstacles, curRow, curCol, context.numRows, context.numCols, dir)
 			if !inBounds {
 				break
 			}
@@ -142,18 +130,6 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 	}
 
 	return strconv.Itoa(loopCount)
-}
-
-func addCandidates(candidates posSet, obstacles posSet, row int, col int, numRows int, numCols int, dirs dirsArray) {
-	for dir := D6_UP; dir <= D6_LEFT; dir++ {
-		if dirs[dir] {
-			newRow, newCol, inBounds := moveSimple(row, col, dir, numRows, numCols)
-			newPos := gridPos{newRow, newCol}
-			if inBounds && !obstacles.Contains(newPos) {
-				candidates.Add(newPos)
-			}
-		}
-	}
 }
 
 func move(obstacles posSet, curRow int, curCol int, numRows int, numCols int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool) {

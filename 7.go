@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -100,10 +101,9 @@ func testEquation(eq *equation, operators []operator, c chan int) {
 			case OP_MULTIPLY:
 				value *= eq.operands[i+1]
 			case OP_CONCAT:
-				value, err = strconv.Atoi(strconv.Itoa(value) + strconv.Itoa(eq.operands[i+1]))
-				if err != nil {
-					panic("Possible overflow?")
-				}
+				numDigits := math.Log10(float64(eq.operands[i+1])) + 1
+				value *= int(math.Pow10(int(numDigits)))
+				value += eq.operands[i+1]
 			}
 			if value > eq.result {
 				break

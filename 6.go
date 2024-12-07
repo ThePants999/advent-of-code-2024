@@ -102,34 +102,43 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d6context)
 
-	loopCount := 0
+	c := make(chan int)
 	for _, candidate := range context.obstacleCandidates.ToSlice() {
-		grid := make([][]gridLocationState, context.numRows)
-		for i := 0; i < context.numRows; i++ {
-			grid[i] = make([]gridLocationState, context.numCols)
-		}
-		curRow, curCol, dir := context.startRow, context.startCol, D6_UP
-		grid[curRow][curCol].visitedDirs[D6_UP] = true
+		go tryFindLoop(context, candidate.row, candidate.col, c)
+	}
 
-		context.obstacles.Add(candidate)
-
-		for {
-			var inBounds bool
-			curRow, curCol, dir, inBounds = move(context.obstacles, curRow, curCol, context.numRows, context.numCols, dir)
-			if !inBounds {
-				break
-			}
-			if grid[curRow][curCol].visitedDirs[dir] {
-				loopCount++
-				break
-			}
-			grid[curRow][curCol].visitedDirs[dir] = true
-		}
-
-		context.obstacles.Remove(candidate)
+	loopCount := 0
+	for i := 0; i < context.obstacleCandidates.Cardinality(); i++ {
+		loopCount += <-c
 	}
 
 	return strconv.Itoa(loopCount)
+}
+
+func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
+	grid := make([][]gridLocationState, context.numRows)
+	for i := 0; i < context.numRows; i++ {
+		grid[i] = make([]gridLocationState, context.numCols)
+	}
+	curRow, curCol, dir := context.startRow, context.startCol, D6_UP
+	grid[curRow][curCol].visitedDirs[D6_UP] = true
+
+	obstacles := context.obstacles.Clone()
+	obstacles.Add(gridPos{newObstacleRow, newObstacleCol})
+
+	for {
+		var inBounds bool
+		curRow, curCol, dir, inBounds = move(obstacles, curRow, curCol, context.numRows, context.numCols, dir)
+		if !inBounds {
+			c <- 0
+			return
+		}
+		if grid[curRow][curCol].visitedDirs[dir] {
+			c <- 1
+			return
+		}
+		grid[curRow][curCol].visitedDirs[dir] = true
+	}
 }
 
 func move(obstacles posSet, curRow int, curCol int, numRows int, numCols int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool) {

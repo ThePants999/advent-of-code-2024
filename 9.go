@@ -61,13 +61,6 @@ func Day9Part1(logger *slog.Logger, input string) (string, any) {
 
 		// Fill the next gap with right-hand files.
 		for i := 0; i < gaps[gap_ix]; i++ {
-			if right_file_ix == left_file_ix {
-				// The next right-hand file is the same as
-				// the next left-hand file - leave it to
-				// the left-hand file processing to fully
-				// append.
-				break
-			}
 			checksum += (right_file_ix * ix)
 			ix++
 			right_file_subix++

@@ -8,6 +8,7 @@ require (
 )
 
 require (
+	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3 // indirect
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/mowshon/iterium v1.0.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect

@@ -12,6 +12,7 @@ require (
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
 	github.com/mowshon/iterium v1.0.0 // indirect
 	github.com/stretchr/testify v1.8.2 // indirect
+	github.com/thoas/go-funk v0.9.3 // indirect
 	golang.org/x/exp v0.0.0-20230307190834-24139beb5833 // indirect
 )
 

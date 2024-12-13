@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	mapset "github.com/deckarep/golang-set/v2"
-
 	runner "github.com/ThePants999/advent-of-code-go-runner"
 )
 
@@ -43,7 +41,6 @@ type gridPos struct {
 	col int
 }
 type dirsArray [D6_LEFT + 1]bool
-type posSet mapset.Set[gridPos]
 
 type gridLocationState struct {
 	visited     bool
@@ -58,7 +55,7 @@ type obstacleHitState struct {
 type d6context struct {
 	obstaclesByRow     [][]int
 	obstaclesByCol     [][]int
-	obstacleCandidates posSet
+	obstacleCandidates map[gridPos]nothing
 	startRow           int
 	startCol           int
 }
@@ -66,7 +63,7 @@ type d6context struct {
 func Day6Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
 	grid := make([][]gridLocationState, len(lines))
-	obstacles := mapset.NewSet[gridPos]()
+	obstacles := make(map[gridPos]nothing)
 	obstaclesByRow := make([][]int, len(lines))
 	obstaclesByCol := make([][]int, len(lines[0]))
 	for ix := range lines[0] {
@@ -80,7 +77,7 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 		grid[row] = make([]gridLocationState, len(line))
 		for col, gridItem := range line {
 			if gridItem == '#' {
-				obstacles.Add(gridPos{row, col})
+				obstacles[gridPos{row, col}] = nothing{}
 				obstaclesByRow[row] = append(obstaclesByRow[row], col)
 				obstaclesByCol[col] = append(obstaclesByCol[col], row)
 			} else if gridItem == '^' {
@@ -93,7 +90,7 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 
 	numRows, numCols := len(grid), len(grid[0])
 	curRow, curCol := startRow, startCol
-	obstacleCandidates := mapset.NewSet[gridPos]()
+	obstacleCandidates := make(map[gridPos]nothing)
 	visitedCount := 1
 	for {
 		var inBounds bool
@@ -102,13 +99,13 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 			break
 		}
 		if !grid[curRow][curCol].visited {
-			obstacleCandidates.Add(gridPos{curRow, curCol})
+			obstacleCandidates[gridPos{curRow, curCol}] = nothing{}
 			visitedCount++
 			grid[curRow][curCol].visited = true
 		}
 		grid[curRow][curCol].visitedDirs[dir] = true
 	}
-	obstacleCandidates.Remove(gridPos{startRow, startCol})
+	delete(obstacleCandidates, gridPos{startRow, startCol})
 
 	return strconv.Itoa(visitedCount), d6context{obstaclesByRow, obstaclesByCol, obstacleCandidates, startRow, startCol}
 }
@@ -117,12 +114,12 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d6context)
 
 	c := make(chan int)
-	for _, candidate := range context.obstacleCandidates.ToSlice() {
+	for candidate := range context.obstacleCandidates {
 		go tryFindLoop(context, candidate.row, candidate.col, c)
 	}
 
 	loopCount := 0
-	for i := 0; i < context.obstacleCandidates.Cardinality(); i++ {
+	for i := 0; i < len(context.obstacleCandidates); i++ {
 		loopCount += <-c
 	}
 
@@ -130,7 +127,7 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 }
 
 func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
-	obstaclesHit := mapset.NewSet[obstacleHitState]()
+	obstaclesHit := make(map[obstacleHitState]nothing)
 	obstaclesByRow := slices.Clone(context.obstaclesByRow)
 	obstaclesByRow[newObstacleRow] = slices.Clone(context.obstaclesByRow[newObstacleRow])
 	obstaclesByCol := slices.Clone(context.obstaclesByCol)
@@ -174,7 +171,7 @@ func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c ch
 	}
 }
 
-func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstaclesHit mapset.Set[obstacleHitState], curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
+func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstaclesHit map[obstacleHitState]nothing, curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
 	newRow, newCol, inBounds, loopDetected = curRow, curCol, false, false
 	obstacleHit := obstacleHitState{gridPos{curRow, curCol}, curDir}
 	var obstacles []int
@@ -213,10 +210,9 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstacle
 	}
 
 	if inBounds {
-		if obstaclesHit.Contains(obstacleHit) {
-			loopDetected = true
-		} else {
-			obstaclesHit.Add(obstacleHit)
+		_, loopDetected = obstaclesHit[obstacleHit]
+		if !loopDetected {
+			obstaclesHit[obstacleHit] = nothing{}
 		}
 	}
 
@@ -233,12 +229,13 @@ func turnRight(curDir direction6) direction6 {
 	return newDir
 }
 
-func move(obstacles posSet, curRow int, curCol int, numRows int, numCols int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool) {
+func move(obstacles map[gridPos]nothing, curRow int, curCol int, numRows int, numCols int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool) {
 	newDir = curDir
 	newRow, newCol, inBounds = moveSimple(curRow, curCol, curDir, numRows, numCols)
 
 	pos := gridPos{newRow, newCol}
-	if obstacles.Contains(pos) {
+	_, found := obstacles[pos]
+	if found {
 		newRow, newCol = curRow, curCol
 		newDir++
 		if newDir > D6_LEFT {

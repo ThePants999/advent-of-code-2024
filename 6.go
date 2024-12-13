@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -49,26 +50,39 @@ type gridLocationState struct {
 	visitedDirs dirsArray
 }
 
+type obstacleHitState struct {
+	pos gridPos
+	dir direction6
+}
+
 type d6context struct {
-	obstacles          posSet
+	obstaclesByRow     [][]int
+	obstaclesByCol     [][]int
 	obstacleCandidates posSet
 	startRow           int
 	startCol           int
-	numRows            int
-	numCols            int
 }
 
 func Day6Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
 	grid := make([][]gridLocationState, len(lines))
 	obstacles := mapset.NewSet[gridPos]()
+	obstaclesByRow := make([][]int, len(lines))
+	obstaclesByCol := make([][]int, len(lines[0]))
+	for ix := range lines[0] {
+		obstaclesByCol[ix] = make([]int, 0, 20)
+	}
+
 	startRow, startCol := -1, -1
 	dir := D6_UP
 	for row, line := range lines {
+		obstaclesByRow[row] = make([]int, 0, 20)
 		grid[row] = make([]gridLocationState, len(line))
 		for col, gridItem := range line {
 			if gridItem == '#' {
 				obstacles.Add(gridPos{row, col})
+				obstaclesByRow[row] = append(obstaclesByRow[row], col)
+				obstaclesByCol[col] = append(obstaclesByCol[col], row)
 			} else if gridItem == '^' {
 				startRow, startCol = row, col
 				grid[row][col].visited = true
@@ -96,7 +110,7 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 	}
 	obstacleCandidates.Remove(gridPos{startRow, startCol})
 
-	return strconv.Itoa(visitedCount), d6context{obstacles, obstacleCandidates, startRow, startCol, numRows, numCols}
+	return strconv.Itoa(visitedCount), d6context{obstaclesByRow, obstaclesByCol, obstacleCandidates, startRow, startCol}
 }
 
 func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
@@ -116,29 +130,107 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 }
 
 func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
-	grid := make([][]gridLocationState, context.numRows)
-	for i := 0; i < context.numRows; i++ {
-		grid[i] = make([]gridLocationState, context.numCols)
+	obstaclesHit := mapset.NewSet[obstacleHitState]()
+	obstaclesByRow := slices.Clone(context.obstaclesByRow)
+	obstaclesByRow[newObstacleRow] = slices.Clone(context.obstaclesByRow[newObstacleRow])
+	obstaclesByCol := slices.Clone(context.obstaclesByCol)
+	obstaclesByCol[newObstacleCol] = slices.Clone(context.obstaclesByCol[newObstacleCol])
+
+	added := false
+	for ix, obstacle := range obstaclesByRow[newObstacleRow] {
+		if obstacle > newObstacleCol {
+			obstaclesByRow[newObstacleRow] = slices.Insert(obstaclesByRow[newObstacleRow], ix, newObstacleCol)
+			added = true
+			break
+		}
 	}
+	if !added {
+		obstaclesByRow[newObstacleRow] = append(obstaclesByRow[newObstacleRow], newObstacleCol)
+	}
+	added = false
+	for ix, obstacle := range obstaclesByCol[newObstacleCol] {
+		if obstacle > newObstacleRow {
+			obstaclesByCol[newObstacleCol] = slices.Insert(obstaclesByCol[newObstacleCol], ix, newObstacleRow)
+			added = true
+			break
+		}
+	}
+	if !added {
+		obstaclesByCol[newObstacleCol] = append(obstaclesByCol[newObstacleCol], newObstacleRow)
+	}
+
 	curRow, curCol, dir := context.startRow, context.startCol, D6_UP
-	grid[curRow][curCol].visitedDirs[D6_UP] = true
-
-	obstacles := context.obstacles.Clone()
-	obstacles.Add(gridPos{newObstacleRow, newObstacleCol})
-
 	for {
-		var inBounds bool
-		curRow, curCol, dir, inBounds = move(obstacles, curRow, curCol, context.numRows, context.numCols, dir)
+		var inBounds, loopDetected bool
+		curRow, curCol, dir, inBounds, loopDetected = moveToNextObstacle(obstaclesByRow, obstaclesByCol, obstaclesHit, curRow, curCol, dir)
 		if !inBounds {
 			c <- 0
 			return
 		}
-		if grid[curRow][curCol].visitedDirs[dir] {
+		if loopDetected {
 			c <- 1
 			return
 		}
-		grid[curRow][curCol].visitedDirs[dir] = true
 	}
+}
+
+func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstaclesHit mapset.Set[obstacleHitState], curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
+	newRow, newCol, inBounds, loopDetected = curRow, curCol, false, false
+	obstacleHit := obstacleHitState{gridPos{curRow, curCol}, curDir}
+	var obstacles []int
+	var position, obstaclePosition *int
+	var rightwards bool
+	if curDir == D6_UP || curDir == D6_DOWN {
+		obstacles = obstaclesByCol[curCol]
+		position = &newRow
+		obstaclePosition = &(obstacleHit.pos.row)
+		rightwards = (curDir == D6_DOWN)
+	} else {
+		obstacles = obstaclesByRow[curRow]
+		position = &newCol
+		obstaclePosition = &(obstacleHit.pos.col)
+		rightwards = (curDir == D6_RIGHT)
+	}
+
+	if rightwards {
+		for _, obstacle := range obstacles {
+			if obstacle > *position {
+				*obstaclePosition = obstacle
+				*position = obstacle - 1
+				inBounds = true
+				break
+			}
+		}
+	} else {
+		for ix := len(obstacles) - 1; ix >= 0; ix-- {
+			if obstacles[ix] < *position {
+				*obstaclePosition = obstacles[ix]
+				*position = obstacles[ix] + 1
+				inBounds = true
+				break
+			}
+		}
+	}
+
+	if inBounds {
+		if obstaclesHit.Contains(obstacleHit) {
+			loopDetected = true
+		} else {
+			obstaclesHit.Add(obstacleHit)
+		}
+	}
+
+	newDir = turnRight(curDir)
+
+	return
+}
+
+func turnRight(curDir direction6) direction6 {
+	newDir := curDir + 1
+	if newDir > D6_LEFT {
+		newDir = D6_UP
+	}
+	return newDir
 }
 
 func move(obstacles posSet, curRow int, curCol int, numRows int, numCols int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool) {

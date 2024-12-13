@@ -16,11 +16,6 @@ var Day12 = runner.DayImplementation{
 	DayNumber:    12,
 	ExecutePart1: Day12Part1,
 	ExecutePart2: Day12Part2,
-	/*	ExampleInput: `AAAA
-		BBCD
-		BBCC
-		EEEC`,
-			ExamplePart1Answer: "140",*/
 	ExampleInput: `RRRRIICCFF
 RRRRIICCCF
 VVRRRCCFFF

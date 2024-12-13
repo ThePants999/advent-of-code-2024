@@ -11,8 +11,9 @@
 # Test binary, built with `go test -c`
 *.test
 
-# Default output binary
+# Default output binary and profile file
 advent-of-code-2024
+profile.prof
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out

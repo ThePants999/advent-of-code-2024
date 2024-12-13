@@ -85,12 +85,12 @@ func locationInGrid(loc gridPos, numRows int, numCols int) bool {
 	return loc.row >= 0 && loc.row < numRows && loc.col >= 0 && loc.col < numCols
 }
 
-func (this gridPos) Add(other gridPos) gridPos {
-	return gridPos{this.row + other.row, this.col + other.col}
+func (pos gridPos) Add(other gridPos) gridPos {
+	return gridPos{pos.row + other.row, pos.col + other.col}
 }
 
-func (this gridPos) Subtract(other gridPos) gridPos {
-	return gridPos{this.row - other.row, this.col - other.col}
+func (pos gridPos) Subtract(other gridPos) gridPos {
+	return gridPos{pos.row - other.row, pos.col - other.col}
 }
 
 func Day8Part2(logger *slog.Logger, input string, part1Context any) string {

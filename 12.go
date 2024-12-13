@@ -98,7 +98,7 @@ func calcTotalPrice(regions *[]region, plotWeight func(*region, gridPos) int) in
 	for _, reg := range *regions {
 		go reg.calcPrice(plotWeight, c)
 	}
-	for _, _ = range *regions {
+	for range *regions {
 		price += <-c
 	}
 	return price

@@ -126,7 +126,7 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 }
 
 func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
-	obstaclesHit := make(map[obstacleHitState]nothing)
+	obstaclesHit := make(map[obstacleHitState]nothing, 150)
 
 	curRow, curCol, dir := context.startRow, context.startCol, D6_UP
 	for {

@@ -6,7 +6,6 @@ require (
 	github.com/ThePants999/advent-of-code-go-runner v0.2.0
 	github.com/golang-collections/collections v0.0.0-20130729185459-604e922904d3
 	github.com/mowshon/iterium v1.0.0
-	github.com/thoas/go-funk v0.9.3
 )
 
 require (

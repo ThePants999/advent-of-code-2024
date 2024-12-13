@@ -7,7 +7,6 @@ import (
 
 	"github.com/golang-collections/collections/set"
 	stack "github.com/golang-collections/collections/stack"
-	"github.com/thoas/go-funk"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
 )
@@ -129,10 +128,11 @@ func Day12Part2(logger *slog.Logger, input string, part1Context any) string {
 			{pos.row - 1, pos.col - 1},
 			{pos.row - 1, pos.col},
 		}
-		inRegion := funk.Map(allAdj, func(p gridPos) bool {
-			_, found := r.plots[p]
-			return found
-		}).([]bool)
+		var inRegion [9]bool
+		for ix := 0; ix < 9; ix++ {
+			_, inRegion[ix] = r.plots[allAdj[ix]]
+		}
+
 		for dir := UP_RIGHT; dir <= UP_LEFT; dir += 2 {
 			if !inRegion[dir-1] && !inRegion[dir+1] {
 				// Convex vertex

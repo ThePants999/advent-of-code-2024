@@ -6,8 +6,6 @@ import (
 	"strconv"
 	"strings"
 
-	mapset "github.com/deckarep/golang-set/v2"
-
 	runner "github.com/ThePants999/advent-of-code-go-runner"
 )
 
@@ -61,10 +59,10 @@ func getOrCreatePage(pages map[string]*page, number string) *page {
 	return thePage
 }
 
-func makePageIllegal(legalPages mapset.Set[string], thePage *page) {
-	legalPages.Remove(thePage.number)
+func makePageIllegal(legalPages map[string]nothing, thePage *page) {
+	delete(legalPages, thePage.number)
 	for _, prereq := range thePage.prereqOf {
-		legalPages.Remove(prereq.number)
+		delete(legalPages, prereq.number)
 	}
 }
 
@@ -104,10 +102,14 @@ func Day5Part1(logger *slog.Logger, input string) (string, any) {
 
 // Returns -1 for a valid update, else index of the last illegally-placed page.
 func checkUpdate(allPages map[string]*page, pagesInThisUpdate []string) int {
-	legalPages := mapset.NewSetFromMapKeys(allPages)
+	legalPages := make(map[string]nothing, len(allPages))
+	for page := range allPages {
+		legalPages[page] = nothing{}
+	}
 	invalidIndex := -1
 	for ix, pageNumber := range pagesInThisUpdate {
-		if !legalPages.Contains(pageNumber) {
+		_, found := legalPages[pageNumber]
+		if !found {
 			invalidIndex = ix
 			break
 		}

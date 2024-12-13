@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/mowshon/iterium"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
@@ -62,7 +61,7 @@ func Day8Part1(logger *slog.Logger, input string) (string, any) {
 	numRows, numCols := len(rows), len(rows[0])
 	context := day8context{allCombinations, numRows, numCols}
 
-	set := mapset.NewSet[gridPos]()
+	set := make(map[gridPos]nothing)
 	for _, combination := range allCombinations {
 		locationA := gridPos{
 			combination[0].row + combination[0].row - combination[1].row,
@@ -71,14 +70,14 @@ func Day8Part1(logger *slog.Logger, input string) (string, any) {
 			combination[1].row + combination[1].row - combination[0].row,
 			combination[1].col + combination[1].col - combination[0].col}
 		if locationInGrid(locationA, numRows, numCols) {
-			set.Add(locationA)
+			set[locationA] = nothing{}
 		}
 		if locationInGrid(locationB, numRows, numCols) {
-			set.Add(locationB)
+			set[locationB] = nothing{}
 		}
 	}
 
-	return strconv.Itoa(set.Cardinality()), context
+	return strconv.Itoa(len(set)), context
 }
 
 func locationInGrid(loc gridPos, numRows int, numCols int) bool {
@@ -96,17 +95,17 @@ func (pos gridPos) Subtract(other gridPos) gridPos {
 func Day8Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(day8context)
 
-	set := mapset.NewSet[gridPos]()
+	set := make(map[gridPos]nothing)
 	for _, combination := range context.combinations {
 		start := combination[0]
 		delta := combination[1].Subtract(start)
 		for next := start; locationInGrid(next, context.numRows, context.numCols); next = next.Add(delta) {
-			set.Add(next)
+			set[next] = nothing{}
 		}
 		for next := start; locationInGrid(next, context.numRows, context.numCols); next = next.Subtract(delta) {
-			set.Add(next)
+			set[next] = nothing{}
 		}
 	}
 
-	return strconv.Itoa(set.Cardinality())
+	return strconv.Itoa(len(set))
 }

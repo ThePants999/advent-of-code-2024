@@ -13,7 +13,7 @@ var Day = runner.DayImplementation{
 	DayNumber:          ,
 	ExecutePart1:       DayPart1,
 	ExecutePart2:       DayPart2,
-	ExampleInput:       "",
+	ExampleInput:       ``,
 	ExamplePart1Answer: "",
 	ExamplePart2Answer: "",
 }

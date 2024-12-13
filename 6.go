@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -128,38 +127,11 @@ func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 
 func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
 	obstaclesHit := make(map[obstacleHitState]nothing)
-	obstaclesByRow := slices.Clone(context.obstaclesByRow)
-	obstaclesByRow[newObstacleRow] = slices.Clone(context.obstaclesByRow[newObstacleRow])
-	obstaclesByCol := slices.Clone(context.obstaclesByCol)
-	obstaclesByCol[newObstacleCol] = slices.Clone(context.obstaclesByCol[newObstacleCol])
-
-	added := false
-	for ix, obstacle := range obstaclesByRow[newObstacleRow] {
-		if obstacle > newObstacleCol {
-			obstaclesByRow[newObstacleRow] = slices.Insert(obstaclesByRow[newObstacleRow], ix, newObstacleCol)
-			added = true
-			break
-		}
-	}
-	if !added {
-		obstaclesByRow[newObstacleRow] = append(obstaclesByRow[newObstacleRow], newObstacleCol)
-	}
-	added = false
-	for ix, obstacle := range obstaclesByCol[newObstacleCol] {
-		if obstacle > newObstacleRow {
-			obstaclesByCol[newObstacleCol] = slices.Insert(obstaclesByCol[newObstacleCol], ix, newObstacleRow)
-			added = true
-			break
-		}
-	}
-	if !added {
-		obstaclesByCol[newObstacleCol] = append(obstaclesByCol[newObstacleCol], newObstacleRow)
-	}
 
 	curRow, curCol, dir := context.startRow, context.startCol, D6_UP
 	for {
 		var inBounds, loopDetected bool
-		curRow, curCol, dir, inBounds, loopDetected = moveToNextObstacle(obstaclesByRow, obstaclesByCol, obstaclesHit, curRow, curCol, dir)
+		curRow, curCol, dir, inBounds, loopDetected = moveToNextObstacle(context.obstaclesByRow, context.obstaclesByCol, newObstacleRow, newObstacleCol, obstaclesHit, curRow, curCol, dir)
 		if !inBounds {
 			c <- 0
 			return
@@ -171,29 +143,42 @@ func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c ch
 	}
 }
 
-func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstaclesHit map[obstacleHitState]nothing, curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
+func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObstacleRow int, newObstacleCol int, obstaclesHit map[obstacleHitState]nothing, curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
 	newRow, newCol, inBounds, loopDetected = curRow, curCol, false, false
 	obstacleHit := obstacleHitState{gridPos{curRow, curCol}, curDir}
 	var obstacles []int
 	var position, obstaclePosition *int
 	var rightwards bool
+	newObstacle := -1
 	if curDir == D6_UP || curDir == D6_DOWN {
 		obstacles = obstaclesByCol[curCol]
 		position = &newRow
 		obstaclePosition = &(obstacleHit.pos.row)
 		rightwards = (curDir == D6_DOWN)
+		if newObstacleCol == curCol {
+			newObstacle = newObstacleRow
+		}
 	} else {
 		obstacles = obstaclesByRow[curRow]
 		position = &newCol
 		obstaclePosition = &(obstacleHit.pos.col)
 		rightwards = (curDir == D6_RIGHT)
+		if newObstacleRow == curRow {
+			newObstacle = newObstacleCol
+		}
 	}
 
 	if rightwards {
 		for _, obstacle := range obstacles {
 			if obstacle > *position {
-				*obstaclePosition = obstacle
-				*position = obstacle - 1
+				if newObstacle > *position && newObstacle < obstacle {
+					// We'd hit the new obstacle first.
+					*obstaclePosition = newObstacle
+					*position = newObstacle - 1
+				} else {
+					*obstaclePosition = obstacle
+					*position = obstacle - 1
+				}
 				inBounds = true
 				break
 			}
@@ -201,11 +186,30 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, obstacle
 	} else {
 		for ix := len(obstacles) - 1; ix >= 0; ix-- {
 			if obstacles[ix] < *position {
-				*obstaclePosition = obstacles[ix]
-				*position = obstacles[ix] + 1
+				if newObstacle < *position && newObstacle > obstacles[ix] {
+					// We'd hit the new obstacle first.
+					*obstaclePosition = newObstacle
+					*position = newObstacle + 1
+				} else {
+					*obstaclePosition = obstacles[ix]
+					*position = obstacles[ix] + 1
+				}
 				inBounds = true
 				break
 			}
+		}
+	}
+
+	if !inBounds && newObstacle > -1 {
+		// Check to see if the new obstacle would have stopped us going out of bounds.
+		if rightwards && newObstacle > *position {
+			*obstaclePosition = newObstacle
+			*position = newObstacle - 1
+			inBounds = true
+		} else if !rightwards && newObstacle < *position {
+			*obstaclePosition = newObstacle
+			*position = newObstacle + 1
+			inBounds = true
 		}
 	}
 

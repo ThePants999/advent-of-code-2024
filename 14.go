@@ -82,7 +82,7 @@ func Day14Part2(logger *slog.Logger, input string, part1Context any) string {
 	}
 	meanRow, meanCol := float64(rowSum)/float64(len(context.robots)), float64(colSum)/float64(len(context.robots))
 
-	fHeight, fWidth := float64(context.areaHeight), float64(context.areaWidth)
+	numRobots := float64(len(context.robots))
 	maxDimension := context.areaHeight
 
 	minRowVariance, minRowVarianceIteration, minColVariance, minColVarianceIteration := math.MaxFloat64, 0, math.MaxFloat64, 0
@@ -94,7 +94,7 @@ func Day14Part2(logger *slog.Logger, input string, part1Context any) string {
 			} else if newRow < 0 {
 				newRow += context.areaHeight
 			}
-			meanRow += float64(newRow-context.robots[ix].pos.row) / fHeight
+			meanRow += float64(newRow-context.robots[ix].pos.row) / numRobots
 			context.robots[ix].pos.row = newRow
 
 			newCol := context.robots[ix].pos.col + context.robots[ix].vector.col
@@ -103,7 +103,7 @@ func Day14Part2(logger *slog.Logger, input string, part1Context any) string {
 			} else if newCol < 0 {
 				newCol += context.areaWidth
 			}
-			meanCol += float64(newCol-context.robots[ix].pos.col) / fWidth
+			meanCol += float64(newCol-context.robots[ix].pos.col) / numRobots
 			context.robots[ix].pos.col = newCol
 		}
 

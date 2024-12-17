@@ -74,75 +74,91 @@ type d16NodeId struct {
 }
 
 type d16Node struct {
-	id   d16NodeId
-	cost int
-	heap *d16heap
-	next *d16Node
-	prev *d16Node
+	id     d16NodeId
+	cost   int
+	heap   *d16Heap
+	heapIx int
 }
 
-type d16heap struct {
-	first *d16Node
-	last  *d16Node
+type d16Heap struct {
+	arr []*d16Node
 }
 
-func (heap *d16heap) Push(new *d16Node) {
+func NewHeap() *d16Heap {
+	heap := d16Heap{}
+	heap.arr = make([]*d16Node, 1, 10000)
+	return &heap
+}
+
+func (heap *d16Heap) Push(new *d16Node) {
+	heap.arr = append(heap.arr, new)
 	new.heap = heap
-	if heap.first == nil {
-		heap.first = new
-		heap.last = new
-	} else {
-		var pos *d16Node
-		for pos = heap.first; pos != nil && pos.cost < new.cost; pos = pos.next {
-		}
+	new.heapIx = len(heap.arr) - 1
+	heap.PercolateUp(new.heapIx)
+}
 
-		if pos == nil {
-			// At end
-			heap.last.next = new
-			new.prev = heap.last
-			heap.last = new
-			new.next = nil
-		} else if pos == heap.first {
-			// At front
-			heap.first.prev = new
-			new.next = heap.first
-			heap.first = new
-			new.prev = nil
+func (heap *d16Heap) PercolateUp(ix int) {
+	for ; ix > 1 && heap.arr[ix].cost < heap.arr[ix/2].cost; ix /= 2 {
+		heap.arr[ix], heap.arr[ix/2] = heap.arr[ix/2], heap.arr[ix]
+		heap.arr[ix].heapIx = ix
+		heap.arr[ix/2].heapIx = ix / 2
+	}
+}
+
+func (heap *d16Heap) PercolateDown(ix int) {
+	for 2*ix < len(heap.arr) {
+		leftIx := ix * 2
+		rightIx := leftIx + 1
+		if rightIx < len(heap.arr) && heap.arr[rightIx].cost < heap.arr[leftIx].cost && heap.arr[rightIx].cost < heap.arr[ix].cost {
+			heap.arr[ix], heap.arr[rightIx] = heap.arr[rightIx], heap.arr[ix]
+			heap.arr[ix].heapIx = ix
+			heap.arr[rightIx].heapIx = rightIx
+			ix = rightIx
+		} else if heap.arr[leftIx].cost < heap.arr[ix].cost {
+			heap.arr[ix], heap.arr[leftIx] = heap.arr[leftIx], heap.arr[ix]
+			heap.arr[ix].heapIx = ix
+			heap.arr[leftIx].heapIx = leftIx
+			ix = leftIx
 		} else {
-			new.prev = pos.prev
-			new.next = pos
-			pos.prev.next = new
-			pos.prev = new
+			break
 		}
 	}
 }
 
-func (heap *d16heap) Pop() *d16Node {
-	ret := heap.first
-	if ret.next != nil {
-		ret.next.prev = ret.prev
+func (heap *d16Heap) Pop() *d16Node {
+	if len(heap.arr) == 1 {
+		return nil
 	}
-	heap.first = ret.next
-	if heap.first == nil {
-		heap.last = nil
+	ret := heap.arr[1]
+	ret.heapIx = 0
+	ret.heap = nil
+	if len(heap.arr) == 2 {
+		heap.arr = heap.arr[:1]
+		return ret
 	}
+
+	// Swap last element to root.
+	heap.arr[1] = heap.arr[len(heap.arr)-1]
+	heap.arr[1].heapIx = 1
+	heap.arr = heap.arr[:len(heap.arr)-1]
+
+	// Percolate down to the correct place.
+	heap.PercolateDown(1)
+
 	return ret
 }
 
-func (heap *d16heap) Remove(node *d16Node) {
-	if node == heap.first {
-		heap.first = node.next
+func (heap *d16Heap) Update(node *d16Node) {
+	ix := node.heapIx
+	if ix > 1 && heap.arr[ix].cost < heap.arr[ix/2].cost {
+		heap.PercolateUp(ix)
+	} else {
+		heap.PercolateDown(ix)
 	}
-	if node == heap.last {
-		heap.last = node.prev
-	}
-	if node.prev != nil {
-		node.prev.next = node.next
-	}
-	if node.next != nil {
-		node.next.prev = node.prev
-	}
-	node.heap = nil
+}
+
+func (heap *d16Heap) IsEmpty() bool {
+	return len(heap.arr) == 1
 }
 
 func (node *d16Node) UpdateCost(newCost int) {
@@ -150,15 +166,6 @@ func (node *d16Node) UpdateCost(newCost int) {
 	if node.heap != nil {
 		node.heap.Update(node)
 	}
-}
-
-func (heap *d16heap) Update(node *d16Node) {
-	heap.Remove(node)
-	heap.Push(node)
-}
-
-func (heap *d16heap) IsEmpty() bool {
-	return heap.first == nil
 }
 
 type d16context struct {
@@ -189,7 +196,7 @@ func Day16Part1(logger *slog.Logger, input string) (string, any) {
 	grid := make([][]d16GridSquare, len(lines))
 	startRow, startCol := 0, 0
 	endRow, endCol := 0, 0
-	heap := d16heap{}
+	heap := NewHeap()
 	for rowIx, row := range lines {
 		grid[rowIx] = make([]d16GridSquare, len(row))
 		for colIx, square := range row {

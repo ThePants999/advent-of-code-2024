@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,14 +40,9 @@ type d17Program struct {
 	regC int
 }
 
-type programResult struct {
-	output         string
-	successfulCopy bool
-}
-
-func (prog *d17Program) Execute(successfulCopyRequired bool) programResult {
-	insPtr, cpyPtr := 0, 0
-	var output strings.Builder
+func (prog *d17Program) Execute() []int {
+	insPtr := 0
+	output := make([]int, 0, len(prog.data))
 
 	for insPtr < len(prog.data) {
 		instruction := prog.data[insPtr]
@@ -55,11 +51,7 @@ func (prog *d17Program) Execute(successfulCopyRequired bool) programResult {
 
 		switch instruction {
 		case INS_ADV:
-			divisor := 1
-			for i := 0; i < combo; i++ {
-				divisor *= 2
-			}
-			prog.regA /= divisor
+			prog.regA >>= combo
 		case INS_BXL:
 			prog.regB ^= literal
 		case INS_BST:
@@ -71,43 +63,16 @@ func (prog *d17Program) Execute(successfulCopyRequired bool) programResult {
 		case INS_BXC:
 			prog.regB = prog.regB ^ prog.regC
 		case INS_OUT:
-			value := combo % 8
-			if successfulCopyRequired {
-				if cpyPtr >= len(prog.data) || value != prog.data[cpyPtr] {
-					return programResult{"", false}
-				} else {
-					cpyPtr++
-				}
-			} else {
-				output.WriteString(strconv.Itoa(value))
-				output.WriteString(",")
-			}
+			output = append(output, combo%8)
 		case INS_BDV:
-			divisor := 1
-			for i := 0; i < combo; i++ {
-				divisor *= 2
-			}
-			prog.regB = prog.regA / divisor
+			prog.regB = prog.regA >> combo
 		case INS_CDV:
-			divisor := 1
-			for i := 0; i < combo; i++ {
-				divisor *= 2
-			}
-			prog.regC = prog.regA / divisor
+			prog.regC = prog.regA >> combo
 		}
 		insPtr += 2
 	}
 
-	if successfulCopyRequired {
-		if cpyPtr == len(prog.data) {
-			return programResult{"", true}
-		} else {
-			return programResult{"", false}
-		}
-	} else {
-		result := output.String()
-		return programResult{result[:len(result)-1], false}
-	}
+	return output
 }
 
 func Day17Part1(logger *slog.Logger, input string) (string, any) {
@@ -123,7 +88,14 @@ func Day17Part1(logger *slog.Logger, input string) (string, any) {
 	}
 
 	progCopy := prog
-	return progCopy.Execute(false).output, prog
+	output := progCopy.Execute()
+	var result strings.Builder
+	for _, val := range output {
+		result.WriteString(strconv.Itoa(val))
+		result.WriteString(",")
+	}
+	resStr := result.String()
+	return resStr[:len(resStr)-1], prog
 }
 
 func comboOperand(operand int, regA int, regB int, regC int) int {
@@ -144,15 +116,35 @@ func comboOperand(operand int, regA int, regB int, regC int) int {
 func Day17Part2(logger *slog.Logger, input string, part1Context any) string {
 	prog := part1Context.(d17Program)
 
-	regValue := 0
-	for {
-		progCopy := prog
-		progCopy.regA = regValue
-		if progCopy.Execute(true).successfulCopy {
-			break
+	candidateA := 0
+	// It is approximately the case that each 3 bits of register A will
+	// determine one output value, with the least significant bits
+	// corresponding to the first output value. So what we're going to do
+	// looks like this:
+	// -  Try a set of small A values until we find one that outputs the
+	//    LAST output value.
+	// -  When we find it, "lock it in" by shifting 3 bits left. We don't
+	//    technically lock it in - we can change those bits further - but
+	//    they're our starting point for what follows.
+	// -  We then start trying candidates incrementally to find one that
+	//    outputs the last TWO output values. It's possible for bits
+	//    more significant than the last three to influence the last
+	//    output value, so the bits we've "locked in" might be wrong, and
+	//    that's why we need to check the full set of output values so far
+	//    on every iteration. But we shouldn't need to change too much of
+	//    what we've "locked in" before we find the right combo.
+	// -  Repeat until we've got the whole set of output values.
+	for pos := len(prog.data) - 1; pos >= 0; pos-- {
+		candidateA <<= 3
+		for {
+			prog.regA = candidateA
+			output := prog.Execute()
+			if slices.Equal(output, prog.data[pos:]) {
+				break
+			}
+			candidateA++
 		}
-		regValue++
 	}
 
-	return strconv.Itoa(regValue)
+	return strconv.Itoa(candidateA)
 }

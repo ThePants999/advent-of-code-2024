@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -45,34 +44,31 @@ var Day5 = runner.DayImplementation{
 	ExamplePart2Answer: "123",
 }
 
-type page struct {
-	number   string
-	prereqOf []*page
-}
+const NUM_PAGES int = 100
 
-func getOrCreatePage(pages map[string]*page, number string) *page {
-	thePage, found := pages[number]
-	if !found {
-		thePage = &page{number, make([]*page, 0, 10)}
-		pages[number] = thePage
-	}
-	return thePage
-}
-
-func makePageIllegal(legalPages map[string]nothing, thePage *page) {
-	delete(legalPages, thePage.number)
-	for _, prereq := range thePage.prereqOf {
-		delete(legalPages, prereq.number)
+func makePageIllegal(prereqs [][]int, pageIllegal []bool, pageNum int) {
+	pageIllegal[pageNum] = true
+	for _, prereq := range prereqs[pageNum] {
+		pageIllegal[prereq] = true
 	}
 }
 
 type p1Context struct {
-	allPages         map[string]*page
-	incorrectUpdates [][]string
+	prereqs          [][]int
+	incorrectUpdates [][]int
+}
+
+func addPrereq(pages [][]int, page int, prereqOf int) {
+	if pages[page] == nil {
+		pages[page] = make([]int, 1, 10)
+		pages[page][0] = prereqOf
+	} else {
+		pages[page] = append(pages[page], prereqOf)
+	}
 }
 
 func Day5Part1(logger *slog.Logger, input string) (string, any) {
-	allPages := make(map[string]*page)
+	prereqs := make([][]int, NUM_PAGES)
 	lines := strings.Fields(input)
 	ix := 0
 	var line string
@@ -80,54 +76,54 @@ func Day5Part1(logger *slog.Logger, input string) (string, any) {
 		if line[2] != '|' {
 			break
 		}
-		firstPage := getOrCreatePage(allPages, line[0:2])
-		secondPage := getOrCreatePage(allPages, line[3:])
-		firstPage.prereqOf = append(firstPage.prereqOf, secondPage)
+		firstPage, _ := strconv.Atoi(line[0:2])
+		secondPage, _ := strconv.Atoi(line[3:])
+		addPrereq(prereqs, firstPage, secondPage)
 	}
 
 	sum := 0
-	incorrectUpdates := make([][]string, 0, len(lines))
+	incorrectUpdates := make([][]int, 0, len(lines))
 	for ; ix < len(lines); ix++ {
-		pagesInThisUpdate := strings.Split(lines[ix], ",")
-		slices.Reverse(pagesInThisUpdate)
-		if checkUpdate(allPages, pagesInThisUpdate) == -1 {
-			middlePage, _ := strconv.Atoi(pagesInThisUpdate[len(pagesInThisUpdate)/2])
-			sum += middlePage
+		pagesInThisUpdateStr := strings.Split(lines[ix], ",")
+		numPages := len(pagesInThisUpdateStr)
+		pagesInThisUpdate := make([]int, numPages)
+		// Simultaneously convert to ints and reverse
+		for i := range numPages {
+			pagesInThisUpdate[numPages-i-1], _ = strconv.Atoi(pagesInThisUpdateStr[i])
+		}
+
+		if checkUpdate(prereqs, pagesInThisUpdate) == -1 {
+			sum += pagesInThisUpdate[numPages/2]
 		} else {
 			incorrectUpdates = append(incorrectUpdates, pagesInThisUpdate)
 		}
 	}
-	return strconv.Itoa(sum), p1Context{allPages, incorrectUpdates}
+	return strconv.Itoa(sum), p1Context{prereqs, incorrectUpdates}
 }
 
 // Returns -1 for a valid update, else index of the last illegally-placed page.
-func checkUpdate(allPages map[string]*page, pagesInThisUpdate []string) int {
-	legalPages := make(map[string]nothing, len(allPages))
-	for page := range allPages {
-		legalPages[page] = nothing{}
-	}
+func checkUpdate(prereqs [][]int, pagesInThisUpdate []int) int {
+	//legalPages := make(map[string]nothing, len(allPages))
+	pageIllegal := make([]bool, NUM_PAGES)
 	invalidIndex := -1
 	for ix, pageNumber := range pagesInThisUpdate {
-		_, found := legalPages[pageNumber]
-		if !found {
+		if pageIllegal[pageNumber] {
 			invalidIndex = ix
 			break
 		}
-		thePage := allPages[pageNumber]
-		makePageIllegal(legalPages, thePage)
+		makePageIllegal(prereqs, pageIllegal, pageNumber)
 	}
 	return invalidIndex
 }
 
 func Day5Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(p1Context)
-	allPages := context.allPages
+	prereqs := context.prereqs
 	sum := 0
 	for ix := 0; ix < len(context.incorrectUpdates); ix++ {
 		pagesInThisUpdate := context.incorrectUpdates[ix]
-		if invalidPageIx := checkUpdate(allPages, pagesInThisUpdate); invalidPageIx == -1 {
-			middlePage, _ := strconv.Atoi(pagesInThisUpdate[len(pagesInThisUpdate)/2])
-			sum += middlePage
+		if invalidPageIx := checkUpdate(prereqs, pagesInThisUpdate); invalidPageIx == -1 {
+			sum += pagesInThisUpdate[len(pagesInThisUpdate)/2]
 		} else {
 			pagesInThisUpdate[invalidPageIx], pagesInThisUpdate[invalidPageIx-1] = pagesInThisUpdate[invalidPageIx-1], pagesInThisUpdate[invalidPageIx]
 			ix--

@@ -2,6 +2,7 @@ package main
 
 import (
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -49,15 +50,10 @@ const START_AFTER_EXAMPLE int = 12
 const START_AFTER_REAL int = 1024
 
 type d18Context struct {
-	walls       [][]bool
-	gridSize    int
-	lines       []string
-	currentPath map[gridPos]nothing
-}
-
-type d18State struct {
-	pos  gridPos
-	prev *d18State
+	walls    [][]int
+	gridSize int
+	minTime  int
+	lines    []string
 }
 
 func Day18Part1(logger *slog.Logger, input string) (string, any) {
@@ -68,87 +64,96 @@ func Day18Part1(logger *slog.Logger, input string) (string, any) {
 		gridSize = GRID_SIZE_REAL
 		startAfter = START_AFTER_REAL
 	}
-	walls := make([][]bool, gridSize)
-	visited := make([][]bool, gridSize)
+
+	walls := make([][]int, gridSize)
 	for rowIx := range gridSize {
-		walls[rowIx] = make([]bool, gridSize)
-		visited[rowIx] = make([]bool, gridSize)
-	}
-	for lineIx, line := range lines {
-		if lineIx == startAfter {
-			break
+		walls[rowIx] = make([]int, gridSize)
+		for colIx := range gridSize {
+			walls[rowIx][colIx] = math.MaxInt
 		}
+	}
+
+	// _walls_ tells us at what point in time a wall appears
+	// at that grid location.  (We initialize above to MaxInt,
+	// effectively meaning "never".)
+	for lineIx, line := range lines {
 		commaIx := strings.IndexRune(line, ',')
 		colIx, _ := strconv.Atoi(line[:commaIx])
 		rowIx, _ := strconv.Atoi(line[commaIx+1:])
-		walls[rowIx][colIx] = true
+		walls[rowIx][colIx] = lineIx
 	}
-	lines = lines[startAfter:]
 
-	path := runMaze(walls, gridSize)
-	return strconv.Itoa(len(path) - 1), d18Context{walls, gridSize, lines, path}
+	pathLen := runMaze(walls, startAfter-1, gridSize)
+	return strconv.Itoa(pathLen), d18Context{walls, gridSize, startAfter, lines}
 }
 
-func runMaze(walls [][]bool, gridSize int) map[gridPos]nothing {
+// Simulate running the maze at a given time - which means the walls that are
+// considered to be in place are those where walls[rowIx][colIx] <= time.
+func runMaze(walls [][]int, time int, gridSize int) int {
 	visited := make([][]bool, gridSize)
 	for i := range gridSize {
 		visited[i] = make([]bool, gridSize)
 	}
 
-	var finalState *d18State
+	pathLen := 0
+	solved := false
 	q := queue.New()
-	q.Enqueue(d18State{gridPos{0, 0}, nil})
+	q.Enqueue(gridPos{0, 0})
+
+outer:
 	for q.Len() > 0 {
-		s := q.Dequeue().(d18State)
-		if s.pos.row == gridSize-1 && s.pos.col == gridSize-1 {
-			// Reached the end
-			finalState = &s
-			break
-		}
-		if visited[s.pos.row][s.pos.col] {
-			// Been here before
-			continue
-		}
-		visited[s.pos.row][s.pos.col] = true
-		adjs := s.pos.adjacencies(gridSize, gridSize)
-		for _, adj := range adjs {
-			if !walls[adj.row][adj.col] {
-				q.Enqueue(d18State{adj, &s})
+		currentQueueLen := q.Len()
+		for range currentQueueLen {
+			pos := q.Dequeue().(gridPos)
+			if pos.row == gridSize-1 && pos.col == gridSize-1 {
+				// Reached the end
+				solved = true
+				break outer
+			}
+			visited[pos.row][pos.col] = true
+			adjs := pos.adjacencies(gridSize, gridSize)
+			for _, adj := range adjs {
+				if walls[adj.row][adj.col] > time && !visited[adj.row][adj.col] {
+					// Open space that we've not visited yet
+					visited[adj.row][adj.col] = true
+					q.Enqueue(adj)
+				}
 			}
 		}
+		pathLen++
 	}
 
-	if finalState != nil {
-		path := make(map[gridPos]nothing)
-		for s := finalState; s != nil; s = s.prev {
-			path[s.pos] = nothing{}
-		}
-		return path
-	} else {
-		return nil
+	if !solved {
+		pathLen = -1
 	}
+
+	return pathLen
 }
 
 func Day18Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d18Context)
+	maxTime := len(context.lines)
 
-	path := context.currentPath
-	var line string
-	for _, line = range context.lines {
-		commaIx := strings.IndexRune(line, ',')
-		colIx, _ := strconv.Atoi(line[:commaIx])
-		rowIx, _ := strconv.Atoi(line[commaIx+1:])
-		context.walls[rowIx][colIx] = true
+	// Binary search the remaining ticks.
+	for {
+		time := context.minTime + ((maxTime - context.minTime) / 2)
 
-		_, inPath := path[gridPos{rowIx, colIx}]
-		if inPath {
-			// We just obstructed the current path, find a new one.
-			path = runMaze(context.walls, context.gridSize)
-			if path == nil {
-				break
+		canExit := runMaze(context.walls, time, context.gridSize) >= 0
+
+		if canExit {
+			// We're not blocked yet - try to the right
+			context.minTime = time + 1
+			if context.minTime == maxTime {
+				// Finished - the one to the right is the answer.
+				return context.lines[time+1]
+			}
+		} else {
+			// We're blocked - try to the left.
+			maxTime = time
+			if context.minTime == maxTime {
+				// Finished - the one to the left is the answer.
+				return context.lines[time-1]
 			}
 		}
 	}
-
-	return line
 }

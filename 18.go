@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"math"
 	"strconv"
 	"strings"
 
@@ -49,11 +48,149 @@ const GRID_SIZE_REAL int = 71
 const START_AFTER_EXAMPLE int = 12
 const START_AFTER_REAL int = 1024
 
+type WallSetStatus int
+
+const (
+	UNCONNECTED WallSetStatus = iota
+	TOP_RIGHT
+	BOTTOM_LEFT
+)
+
+type d18GridSquare struct {
+	wall              bool // Remaining elements only valid if this is true
+	disjointSetParent *d18GridSquare
+	disjointSetRank   int
+	status            WallSetStatus
+}
+
+type d18MergeResult struct {
+	newRoot    *d18GridSquare
+	compatible bool
+}
+
 type d18Context struct {
-	walls    [][]int
+	grid     [][]d18GridSquare
 	gridSize int
-	minTime  int
 	lines    []string
+}
+
+func (p gridPos) allAdjacencies(numRows int, numCols int) []gridPos {
+	adj := make([]gridPos, 0, 8)
+	if p.row > 0 {
+		adj = append(adj, gridPos{p.row - 1, p.col})
+		if p.col > 0 {
+			adj = append(adj, gridPos{p.row - 1, p.col - 1})
+		}
+		if p.col < numCols-1 {
+			adj = append(adj, gridPos{p.row - 1, p.col + 1})
+		}
+	}
+	if p.row < numRows-1 {
+		adj = append(adj, gridPos{p.row + 1, p.col})
+		if p.col > 0 {
+			adj = append(adj, gridPos{p.row + 1, p.col - 1})
+		}
+		if p.col < numCols-1 {
+			adj = append(adj, gridPos{p.row + 1, p.col + 1})
+		}
+	}
+	if p.col > 0 {
+		adj = append(adj, gridPos{p.row, p.col - 1})
+	}
+	if p.col < numCols-1 {
+		adj = append(adj, gridPos{p.row, p.col + 1})
+	}
+	return adj
+}
+
+func findDisjointSetRoot(square *d18GridSquare) *d18GridSquare {
+	if square.disjointSetParent != nil {
+		// We take this opportunity to flatten the tree by replacing
+		// all parent pointers along the path with the root pointer.
+		square.disjointSetParent = findDisjointSetRoot(square.disjointSetParent)
+		return square.disjointSetParent
+	} else {
+		return square
+	}
+}
+
+func mergeDisjointSets(squareA *d18GridSquare, squareB *d18GridSquare) d18MergeResult {
+	rootA := findDisjointSetRoot(squareA)
+	rootB := findDisjointSetRoot(squareB)
+
+	if rootA == rootB {
+		// Already in the same set
+		return d18MergeResult{rootA, true}
+	}
+
+	// Make "A" whichever is the highest-ranked of the two
+	if rootA.disjointSetRank < rootB.disjointSetRank {
+		rootA, rootB = rootB, rootA
+	} else if rootA.disjointSetRank == rootB.disjointSetRank {
+		// A's rank will increase through adding B as a child
+		rootA.disjointSetRank++
+	}
+
+	// Move B under A
+	rootB.disjointSetParent = rootA
+
+	if rootA.status == UNCONNECTED {
+		// A being unconnected means they're definitely compatible
+		// but B's status should have priority.
+		rootA.status = rootB.status
+		return d18MergeResult{rootA, true}
+	}
+	if rootB.status == UNCONNECTED {
+		// B being unconnnected while A is connected means they're
+		// compatible but the status is already correctly recorded.
+		// (Moving B under A means B gains A's status.)
+		return d18MergeResult{rootA, true}
+	}
+
+	// Both sets are attached to grid edges, so whether they're
+	// compatible depends on whether they're attached to the same
+	// one.
+	return d18MergeResult{rootA, rootA.status == rootB.status}
+}
+
+// The approach this code takes is to maintain groups of walls that are
+// connected to each other (including diagonally) as "disjoint sets"
+// (see https://en.wikipedia.org/wiki/Disjoint-set_data_structure). Each
+// set knows whether it's touching the bottom-left of the grid (the left
+// edge or the bottom edge), or the top-right of the grid, or whether it's
+// floating in the middle. Newly-added walls can join sets together,
+// which might join a floating set with one connected to an edge, thereby
+// making the new combined set a connected one. The moment we join a
+// bottom-left-connected set with a top-right-connected set, that's the
+// moment we make it impossible to traverse from top left to bottom right.
+// (This function returns true when that happens.)
+func createWall(grid [][]d18GridSquare, wallStr string, gridSize int) bool {
+	commaIx := strings.IndexRune(wallStr, ',')
+	col, _ := strconv.Atoi(wallStr[:commaIx])
+	row, _ := strconv.Atoi(wallStr[commaIx+1:])
+	square := &grid[row][col]
+	square.wall = true
+
+	if row == 0 || col == gridSize-1 {
+		square.status = TOP_RIGHT
+	} else if row == gridSize-1 || col == 0 {
+		square.status = BOTTOM_LEFT
+	}
+
+	adjs := gridPos{row, col}.allAdjacencies(gridSize, gridSize)
+	for _, adj := range adjs {
+		otherSquare := &grid[adj.row][adj.col]
+		if otherSquare.wall {
+			// There's a wall here, we'll need to merge sets.
+			result := mergeDisjointSets(square, otherSquare)
+			square = result.newRoot
+			if !result.compatible {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 func Day18Part1(logger *slog.Logger, input string) (string, any) {
@@ -65,31 +202,21 @@ func Day18Part1(logger *slog.Logger, input string) (string, any) {
 		startAfter = START_AFTER_REAL
 	}
 
-	walls := make([][]int, gridSize)
+	grid := make([][]d18GridSquare, gridSize)
 	for rowIx := range gridSize {
-		walls[rowIx] = make([]int, gridSize)
-		for colIx := range gridSize {
-			walls[rowIx][colIx] = math.MaxInt
-		}
+		grid[rowIx] = make([]d18GridSquare, gridSize)
 	}
 
-	// _walls_ tells us at what point in time a wall appears
-	// at that grid location.  (We initialize above to MaxInt,
-	// effectively meaning "never".)
-	for lineIx, line := range lines {
-		commaIx := strings.IndexRune(line, ',')
-		colIx, _ := strconv.Atoi(line[:commaIx])
-		rowIx, _ := strconv.Atoi(line[commaIx+1:])
-		walls[rowIx][colIx] = lineIx
+	for lineIx := range startAfter {
+		_ = createWall(grid, lines[lineIx], gridSize)
 	}
 
-	pathLen := runMaze(walls, startAfter-1, gridSize)
-	return strconv.Itoa(pathLen), d18Context{walls, gridSize, startAfter, lines}
+	pathLen := runMaze(grid, gridSize)
+	return strconv.Itoa(pathLen), d18Context{grid, gridSize, lines[startAfter:]}
 }
 
-// Simulate running the maze at a given time - which means the walls that are
-// considered to be in place are those where walls[rowIx][colIx] <= time.
-func runMaze(walls [][]int, time int, gridSize int) int {
+// Just a basic BFS that returns the length of the best path.
+func runMaze(grid [][]d18GridSquare, gridSize int) int {
 	visited := make([][]bool, gridSize)
 	for i := range gridSize {
 		visited[i] = make([]bool, gridSize)
@@ -113,7 +240,7 @@ outer:
 			visited[pos.row][pos.col] = true
 			adjs := pos.adjacencies(gridSize, gridSize)
 			for _, adj := range adjs {
-				if walls[adj.row][adj.col] > time && !visited[adj.row][adj.col] {
+				if !grid[adj.row][adj.col].wall && !visited[adj.row][adj.col] {
 					// Open space that we've not visited yet
 					visited[adj.row][adj.col] = true
 					q.Enqueue(adj)
@@ -132,28 +259,12 @@ outer:
 
 func Day18Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d18Context)
-	maxTime := len(context.lines)
-
-	// Binary search the remaining ticks.
-	for {
-		time := context.minTime + ((maxTime - context.minTime) / 2)
-
-		canExit := runMaze(context.walls, time, context.gridSize) >= 0
-
-		if canExit {
-			// We're not blocked yet - try to the right
-			context.minTime = time + 1
-			if context.minTime == maxTime {
-				// Finished - the one to the right is the answer.
-				return context.lines[time+1]
-			}
-		} else {
-			// We're blocked - try to the left.
-			maxTime = time
-			if context.minTime == maxTime {
-				// Finished - the one to the left is the answer.
-				return context.lines[time-1]
-			}
+	for _, line := range context.lines {
+		// See the comment above createWall() for an explanation of the
+		// algorithm we use in this part.
+		if createWall(context.grid, line, context.gridSize) {
+			return line
 		}
 	}
+	return ""
 }

@@ -10,6 +10,7 @@ require (
 
 require (
 	github.com/logrusorgru/aurora/v4 v4.0.0 // indirect
+	github.com/orcaman/concurrent-map/v2 v2.0.1 // indirect
 	golang.org/x/exp v0.0.0-20230307190834-24139beb5833 // indirect
 )
 

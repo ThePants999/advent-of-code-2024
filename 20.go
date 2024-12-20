@@ -130,56 +130,67 @@ func Day20Part2(logger *slog.Logger, input string, part1Context any) string {
 		threshold = 100
 	}
 
-	sum := 0
+	c := make(chan int)
 	for rowIx := 1; rowIx < len(grid)-1; rowIx++ {
-		for colIx := 1; colIx < len(grid[0])-1; colIx++ {
-			if grid[rowIx][colIx] >= 0 {
-				// Non-wall
-				minRowIx := rowIx - 20
-				if minRowIx < 1 {
-					minRowIx = 1
-				}
-				maxRowIx := rowIx + 20
-				if maxRowIx >= len(grid) {
-					maxRowIx = len(grid) - 1
-				}
-				for targetRowIx := minRowIx; targetRowIx <= maxRowIx; targetRowIx++ {
-					var rowDiff int
-					if targetRowIx >= rowIx {
-						rowDiff = targetRowIx - rowIx
-					} else {
-						rowDiff = rowIx - targetRowIx
-					}
-					remainingDist := 20 - rowDiff
+		go day20Part2HandleRow(grid, threshold, rowIx, c)
+	}
 
-					minColIx := colIx - remainingDist
-					if minColIx < 1 {
-						minColIx = 1
-					}
-					maxColIx := colIx + remainingDist
-					if maxColIx >= len(grid[0]) {
-						maxColIx = len(grid[0]) - 1
-					}
-					for targetColIx := minColIx; targetColIx <= maxColIx; targetColIx++ {
-						if grid[targetRowIx][targetColIx] > grid[rowIx][colIx] {
-							// This is a cheat
-							var colDiff int
-							if targetColIx >= colIx {
-								colDiff = targetColIx - colIx
-							} else {
-								colDiff = colIx - targetColIx
-							}
-							dist := rowDiff + colDiff
-							if grid[targetRowIx][targetColIx]-grid[rowIx][colIx]-dist >= threshold {
-								// Legal and qualifying cheat
-								sum++
-							}
+	sum := 0
+	for range len(grid) - 2 {
+		sum += <-c
+	}
+
+	return strconv.Itoa(sum)
+}
+
+func day20Part2HandleRow(grid [][]int, threshold int, rowIx int, c chan int) {
+	sum := 0
+	for colIx := 1; colIx < len(grid[0])-1; colIx++ {
+		if grid[rowIx][colIx] >= 0 {
+			// Non-wall
+			minRowIx := rowIx - 20
+			if minRowIx < 1 {
+				minRowIx = 1
+			}
+			maxRowIx := rowIx + 20
+			if maxRowIx >= len(grid) {
+				maxRowIx = len(grid) - 1
+			}
+			for targetRowIx := minRowIx; targetRowIx <= maxRowIx; targetRowIx++ {
+				var rowDiff int
+				if targetRowIx >= rowIx {
+					rowDiff = targetRowIx - rowIx
+				} else {
+					rowDiff = rowIx - targetRowIx
+				}
+				remainingDist := 20 - rowDiff
+
+				minColIx := colIx - remainingDist
+				if minColIx < 1 {
+					minColIx = 1
+				}
+				maxColIx := colIx + remainingDist
+				if maxColIx >= len(grid[0]) {
+					maxColIx = len(grid[0]) - 1
+				}
+				for targetColIx := minColIx; targetColIx <= maxColIx; targetColIx++ {
+					if grid[targetRowIx][targetColIx] > grid[rowIx][colIx] {
+						// This is a cheat
+						var colDiff int
+						if targetColIx >= colIx {
+							colDiff = targetColIx - colIx
+						} else {
+							colDiff = colIx - targetColIx
+						}
+						dist := rowDiff + colDiff
+						if grid[targetRowIx][targetColIx]-grid[rowIx][colIx]-dist >= threshold {
+							// Legal and qualifying cheat
+							sum++
 						}
 					}
 				}
 			}
 		}
 	}
-
-	return strconv.Itoa(sum)
+	c <- sum
 }

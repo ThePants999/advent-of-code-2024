@@ -332,10 +332,10 @@ func convertDirsToDirs(dirs []d21DirKeypadButton, remainingLevels int) int {
 
 		// Convert this chunk to what the preceding robot needs to input.
 
-		// It takes max 5 keypresses to get from one direction to another, so
-		// max length of converted sequence is 5 times unconverted sequence
+		// It takes max 4 keypresses to get from one direction to another, so
+		// max length of converted sequence is 4 times unconverted sequence
 		// plus an opening PRESS.
-		sequence := make([]d21DirKeypadButton, 1, (endIx-startIx)*5+1)
+		sequence := make([]d21DirKeypadButton, 1, (endIx-startIx)*4+1)
 		sequence[0] = D21_PRESS
 		for ; startIx < endIx; startIx++ {
 			// Add to the sequence

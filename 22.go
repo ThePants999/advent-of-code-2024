@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"strconv"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
@@ -15,56 +14,65 @@ var Day22 = runner.DayImplementation{
 	ExecutePart1: Day22Part1,
 	ExecutePart2: Day22Part2,
 	ExampleInput: `1
-10
-100
+2
+3
 2024`,
-	ExamplePart1Answer: "37327623",
+	ExamplePart1Answer: "37990510",
 	ExamplePart2Answer: "23",
 }
 
 const PRUNE_BITS int = 0b111111111111111111111111
 
-var freqMap sync.Map = sync.Map{}
+const MAX_DELTAS int = 1 << 20
+const DELTA_MASK uint32 = 0b11111111111111111111
+
+var deltasSeenBy [MAX_DELTAS][100]uint32
+var priceForDeltas [MAX_DELTAS]uint32
 
 type d22Buyer struct {
+	seenByIndex    int
+	seenByBit      uint32
 	originalSecret int
 	currentSecret  int
 	deltas         uint32
-	seqToPrice     map[uint32]int8
 }
 
-func newBuyer(initialSecret int) d22Buyer {
-	return d22Buyer{originalSecret: initialSecret, seqToPrice: make(map[uint32]int8)}
+func newBuyer(index int, initialSecret int) d22Buyer {
+	return d22Buyer{
+		seenByIndex:    index / 32,
+		seenByBit:      1 << (index % 32),
+		originalSecret: initialSecret}
 }
 
 func (buyer *d22Buyer) generateAllSecrets(c chan int) {
 	buyer.currentSecret = buyer.originalSecret
 	for ix := range 2000 {
 		newSecret := calcNextSecret(buyer.currentSecret)
-		price := (int8)(newSecret % 10)
-		delta := price - (int8)(buyer.currentSecret%10)
-		buyer.deltas <<= 8
-		buyer.deltas |= uint32(uint8(delta))
+		price := newSecret % 10
+		delta := price - (buyer.currentSecret % 10)
+
+		// We don't care about the actual value of recent
+		// deltas, we just want a unique key from them.
+		// (delta + 9) is in the range 0-18 so needs only
+		// 5 bits to store, so we can store the last four
+		// as a 20-bit number - low enough to use as an
+		// array index.
+		buyer.deltas <<= 5
+		buyer.deltas &= DELTA_MASK
+		buyer.deltas |= uint32(delta + 9)
+
 		if ix > 2 {
-			_, found := buyer.seqToPrice[buyer.deltas]
-			if !found {
-				buyer.seqToPrice[buyer.deltas] = price
-			}
-			if price == 9 {
-				var newCount uint32 = 1
-				count, loaded := freqMap.LoadOrStore(buyer.deltas, &newCount)
-				if loaded {
-					atomic.AddUint32(count.(*uint32), 1)
-				}
+			if deltasSeenBy[buyer.deltas][buyer.seenByIndex]&buyer.seenByBit == 0 {
+				// This is the first time we've seen this delta sequence for this buyer.
+				// Record that we've seen it, and add the current price to the total
+				// price that you get for this delta sequence.
+				atomic.OrUint32(&deltasSeenBy[buyer.deltas][buyer.seenByIndex], buyer.seenByBit)
+				atomic.AddUint32(&priceForDeltas[buyer.deltas], uint32(price))
 			}
 		}
 		buyer.currentSecret = newSecret
 	}
 	c <- buyer.currentSecret
-}
-
-func (buyer *d22Buyer) getPrice(key uint32) int {
-	return int(buyer.seqToPrice[key])
 }
 
 func calcNextSecret(secret int) int {
@@ -79,9 +87,9 @@ func Day22Part1(logger *slog.Logger, input string) (string, any) {
 	buyers := make([]d22Buyer, 0, len(lines))
 
 	c := make(chan int)
-	for _, line := range lines {
+	for ix, line := range lines {
 		secret, _ := strconv.Atoi(line)
-		buyer := newBuyer(secret)
+		buyer := newBuyer(ix, secret)
 		buyers = append(buyers, buyer)
 		go buyer.generateAllSecrets(c)
 	}
@@ -91,33 +99,16 @@ func Day22Part1(logger *slog.Logger, input string) (string, any) {
 		sum += <-c
 	}
 
-	return strconv.Itoa(sum), buyers
+	return strconv.Itoa(sum), nil
 }
 
 func Day22Part2(logger *slog.Logger, input string, part1Context any) string {
-	buyers := part1Context.([]d22Buyer)
-	numThreads := 0
-	c := make(chan int)
-	freqMap.Range(func(key any, _ any) bool {
-		deltas := key.(uint32)
-		numThreads++
-		go func() {
-			result := 0
-			for _, buyer := range buyers {
-				result += buyer.getPrice(deltas)
-			}
-			c <- result
-		}()
-		return true
-	})
-
-	bestResult := 0
-	for range numThreads {
-		result := <-c
-		if result > bestResult {
-			bestResult = result
+	var bestResult uint32
+	for deltas := range MAX_DELTAS {
+		if priceForDeltas[deltas] > bestResult {
+			bestResult = priceForDeltas[deltas]
 		}
 	}
 
-	return strconv.Itoa(bestResult)
+	return strconv.Itoa(int(bestResult))
 }

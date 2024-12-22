@@ -24,20 +24,17 @@ var Day22 = runner.DayImplementation{
 
 const PRUNE_BITS int = 0b111111111111111111111111
 
-type deltaSeq [4]int8
-
 var freqMap sync.Map = sync.Map{}
 
 type d22Buyer struct {
 	originalSecret int
 	currentSecret  int
-	deltas         deltaSeq
-	nextIx         uint8
-	seqToPrice     map[deltaSeq]int8
+	deltas         uint32
+	seqToPrice     map[uint32]int8
 }
 
 func newBuyer(initialSecret int) d22Buyer {
-	return d22Buyer{originalSecret: initialSecret, seqToPrice: make(map[deltaSeq]int8)}
+	return d22Buyer{originalSecret: initialSecret, seqToPrice: make(map[uint32]int8)}
 }
 
 func (buyer *d22Buyer) generateAllSecrets(c chan int) {
@@ -46,17 +43,16 @@ func (buyer *d22Buyer) generateAllSecrets(c chan int) {
 		newSecret := calcNextSecret(buyer.currentSecret)
 		price := (int8)(newSecret % 10)
 		delta := price - (int8)(buyer.currentSecret%10)
-		buyer.deltas[buyer.nextIx] = delta
-		buyer.nextIx = (buyer.nextIx + 1) % 4
+		buyer.deltas <<= 8
+		buyer.deltas |= uint32(uint8(delta))
 		if ix > 2 {
-			key := buyer.getMapKey()
-			_, found := buyer.seqToPrice[key]
+			_, found := buyer.seqToPrice[buyer.deltas]
 			if !found {
-				buyer.seqToPrice[key] = price
+				buyer.seqToPrice[buyer.deltas] = price
 			}
 			if price == 9 {
 				var newCount uint32 = 1
-				count, loaded := freqMap.LoadOrStore(key, &newCount)
+				count, loaded := freqMap.LoadOrStore(buyer.deltas, &newCount)
 				if loaded {
 					atomic.AddUint32(count.(*uint32), 1)
 				}
@@ -67,11 +63,7 @@ func (buyer *d22Buyer) generateAllSecrets(c chan int) {
 	c <- buyer.currentSecret
 }
 
-func (buyer *d22Buyer) getMapKey() deltaSeq {
-	return deltaSeq{buyer.deltas[buyer.nextIx], buyer.deltas[(buyer.nextIx+1)%4], buyer.deltas[(buyer.nextIx+2)%4], buyer.deltas[(buyer.nextIx+3)%4]}
-}
-
-func (buyer *d22Buyer) getPrice(key deltaSeq) int {
+func (buyer *d22Buyer) getPrice(key uint32) int {
 	return int(buyer.seqToPrice[key])
 }
 
@@ -107,7 +99,7 @@ func Day22Part2(logger *slog.Logger, input string, part1Context any) string {
 	numThreads := 0
 	c := make(chan int)
 	freqMap.Range(func(key any, _ any) bool {
-		deltas := key.(deltaSeq)
+		deltas := key.(uint32)
 		numThreads++
 		go func() {
 			result := 0

@@ -44,33 +44,45 @@ func newBuyer(index int, initialSecret int) d22Buyer {
 		originalSecret: initialSecret}
 }
 
+func (buyer *d22Buyer) updateSecretAndDelta() int {
+	newSecret := calcNextSecret(buyer.currentSecret)
+	price := newSecret % 10
+	delta := price - (buyer.currentSecret % 10)
+	buyer.currentSecret = newSecret
+
+	// We don't care about the actual value of recent
+	// deltas, we just want a unique key from them.
+	// (delta + 9) is in the range 0-18 so needs only
+	// 5 bits to store, so we can store the last four
+	// as a 20-bit number - low enough to use as an
+	// array index.
+	buyer.deltas <<= 5
+	buyer.deltas &= DELTA_MASK
+	buyer.deltas |= uint32(delta + 9)
+
+	return price
+}
+
+func (buyer *d22Buyer) hasSeenCurrentDelta() bool {
+	return deltasSeenBy[buyer.deltas][buyer.seenByIndex]&buyer.seenByBit != 0
+}
+
+func (buyer *d22Buyer) recordCurrentPrice(price int) {
+	atomic.OrUint32(&deltasSeenBy[buyer.deltas][buyer.seenByIndex], buyer.seenByBit)
+	atomic.AddUint32(&priceForDeltas[buyer.deltas], uint32(price))
+}
+
 func (buyer *d22Buyer) generateAllSecrets(c chan int) {
 	buyer.currentSecret = buyer.originalSecret
 	for ix := range 2000 {
-		newSecret := calcNextSecret(buyer.currentSecret)
-		price := newSecret % 10
-		delta := price - (buyer.currentSecret % 10)
+		price := buyer.updateSecretAndDelta()
 
-		// We don't care about the actual value of recent
-		// deltas, we just want a unique key from them.
-		// (delta + 9) is in the range 0-18 so needs only
-		// 5 bits to store, so we can store the last four
-		// as a 20-bit number - low enough to use as an
-		// array index.
-		buyer.deltas <<= 5
-		buyer.deltas &= DELTA_MASK
-		buyer.deltas |= uint32(delta + 9)
-
-		if ix > 2 {
-			if deltasSeenBy[buyer.deltas][buyer.seenByIndex]&buyer.seenByBit == 0 {
-				// This is the first time we've seen this delta sequence for this buyer.
-				// Record that we've seen it, and add the current price to the total
-				// price that you get for this delta sequence.
-				atomic.OrUint32(&deltasSeenBy[buyer.deltas][buyer.seenByIndex], buyer.seenByBit)
-				atomic.AddUint32(&priceForDeltas[buyer.deltas], uint32(price))
-			}
+		if ix > 2 && !buyer.hasSeenCurrentDelta() {
+			// This is the first time we've seen this delta sequence for this buyer.
+			// Record that we've seen it, and add the current price to the total
+			// price that you get for this delta sequence.
+			buyer.recordCurrentPrice(price)
 		}
-		buyer.currentSecret = newSecret
 	}
 	c <- buyer.currentSecret
 }

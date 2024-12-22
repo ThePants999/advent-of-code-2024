@@ -69,7 +69,7 @@ func (buyer *d22Buyer) getPrice(key uint32) int {
 
 func calcNextSecret(secret int) int {
 	secret = ((secret << 6) ^ secret) & PRUNE_BITS
-	secret = ((secret >> 5) ^ secret) & PRUNE_BITS
+	secret = ((secret >> 5) ^ secret)
 	secret = ((secret << 11) ^ secret) & PRUNE_BITS
 	return secret
 }

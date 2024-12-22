@@ -30,25 +30,24 @@ var deltasSeenBy [MAX_DELTAS][100]uint32
 var priceForDeltas [MAX_DELTAS]uint32
 
 type d22Buyer struct {
-	seenByIndex    int
-	seenByBit      uint32
-	originalSecret int
-	currentSecret  int
-	deltas         uint32
+	seenByIndex int
+	seenByBit   uint32
+	secret      int
+	deltas      uint32
 }
 
 func newBuyer(index int, initialSecret int) d22Buyer {
 	return d22Buyer{
-		seenByIndex:    index / 32,
-		seenByBit:      1 << (index % 32),
-		originalSecret: initialSecret}
+		seenByIndex: index / 32,
+		seenByBit:   1 << (index % 32),
+		secret:      initialSecret}
 }
 
 func (buyer *d22Buyer) updateSecretAndDelta() int {
-	newSecret := calcNextSecret(buyer.currentSecret)
+	newSecret := calcNextSecret(buyer.secret)
 	price := newSecret % 10
-	delta := price - (buyer.currentSecret % 10)
-	buyer.currentSecret = newSecret
+	delta := price - (buyer.secret % 10)
+	buyer.secret = newSecret
 
 	// We don't care about the actual value of recent
 	// deltas, we just want a unique key from them.
@@ -73,7 +72,6 @@ func (buyer *d22Buyer) recordCurrentPrice(price int) {
 }
 
 func (buyer *d22Buyer) generateAllSecrets(c chan int) {
-	buyer.currentSecret = buyer.originalSecret
 	for ix := range 2000 {
 		price := buyer.updateSecretAndDelta()
 
@@ -84,7 +82,7 @@ func (buyer *d22Buyer) generateAllSecrets(c chan int) {
 			buyer.recordCurrentPrice(price)
 		}
 	}
-	c <- buyer.currentSecret
+	c <- buyer.secret
 }
 
 func calcNextSecret(secret int) int {

@@ -152,6 +152,12 @@ func Day23Part2(logger *slog.Logger, input string, part1Context any) string {
 }
 
 func bronKerbosch(r *set.Set, p *set.Set, x *set.Set, best **set.Set) {
+	if r.Len()+p.Len() <= (*best).Len() {
+		// We don't have enough candidate vertices left to exceed the
+		// biggest we've already found, give up here
+		return
+	}
+
 	if p.Len() == 0 && x.Len() == 0 {
 		// There's nothing more we could add, r is a maximal clique
 		if r.Len() > (*best).Len() {
@@ -160,13 +166,21 @@ func bronKerbosch(r *set.Set, p *set.Set, x *set.Set, best **set.Set) {
 		}
 		return
 	}
-	if r.Len()+p.Len() <= (*best).Len() {
-		// We don't have enough candidate vertices left to exceed the
-		// biggest we've already found, give up here
-		return
+
+	// We want an arbitrary member of P or X, but the stupid fucking
+	// golang-collections set doesn't have any way to get such a thing
+	// that doesn't involve iterating over the entire set >:-(
+	var pivot any
+	p.Do(func(item any) {
+		pivot = item
+	})
+	if pivot == nil {
+		x.Do(func(item any) {
+			pivot = item
+		})
 	}
 
-	p.Do(func(item any) {
+	p.Difference(pivot.(*d23Computer).connections).Do(func(item any) {
 		itemSet := set.New(item)
 		neighbourSet := item.(*d23Computer).connections
 		bronKerbosch(r.Union(itemSet), p.Intersection(neighbourSet), x.Intersection(neighbourSet), best)

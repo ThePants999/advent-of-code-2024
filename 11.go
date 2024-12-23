@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -15,10 +14,6 @@ type intPair struct {
 	two int
 }
 
-// I briefly tried caching the result of a blink on specific
-// stone values; interestingly it actually slowed it down.
-//var day11Cache map[int]intPair
-
 var Day11 = runner.DayImplementation{
 	DayNumber:          11,
 	ExecutePart1:       Day11Part1,
@@ -29,9 +24,9 @@ var Day11 = runner.DayImplementation{
 }
 
 func Day11Part1(logger *slog.Logger, input string) (string, any) {
-	//day11Cache = make(map[int]intPair)
 	first := parseDay11Input(input)
-	return strconv.Itoa(doDay11Calc(first, 25)), nil
+	stones := doDay11Calc(first, 25)
+	return strconv.Itoa(countStones(stones)), stones
 }
 
 func parseDay11Input(input string) map[int]int {
@@ -45,18 +40,51 @@ func parseDay11Input(input string) map[int]int {
 	return stones
 }
 
-func doDay11Calc(stones map[int]int, iterations int) int {
-	stones = maps.Clone(stones)
+func countDigits(num int) int {
+	// At one point, profiling showed 20% of my runtime going
+	// on math.Log10(). What we're trying to use it for is
+	// relatively simple, so here's a dumb implementation.
+	//
+	// Yes, it sickens me too. WHATEVER I DON'T CARE THIS GOT
+	// ME BELOW 10MS
+	switch {
+	case num > 99999999999:
+		return 12
+	case num > 9999999999:
+		return 11
+	case num > 999999999:
+		return 10
+	case num > 99999999:
+		return 9
+	case num > 9999999:
+		return 8
+	case num > 999999:
+		return 7
+	case num > 99999:
+		return 6
+	case num > 9999:
+		return 5
+	case num > 999:
+		return 4
+	case num > 99:
+		return 3
+	case num > 9:
+		return 2
+	default:
+		return 1
+	}
+}
+
+func doDay11Calc(inputStones map[int]int, iterations int) map[int]int {
+	secondStones := make(map[int]int)
+	stones, newStones := &inputStones, &secondStones
 	for i := 0; i < iterations; i++ {
-		newStones := make(map[int]int)
-		for num, count := range stones {
+		for num, count := range *stones {
 			var newNums intPair
-			/*newNums, found := day11Cache[num]
-			if !found {*/
 			if num == 0 {
 				newNums = intPair{1, -1}
 			} else {
-				numDigits := int(math.Log10((float64)(num))) + 1
+				numDigits := countDigits(num)
 				if numDigits%2 == 0 {
 					divisor := int(math.Pow10(numDigits / 2))
 					newNums = intPair{num % divisor, num / divisor}
@@ -64,18 +92,23 @@ func doDay11Calc(stones map[int]int, iterations int) int {
 					newNums = intPair{num * 2024, -1}
 				}
 			}
-			/*day11Cache[num] = newNums
-			}*/
-			existingNum1 := newStones[newNums.one]
-			newStones[newNums.one] = existingNum1 + count
+
+			existingNum1 := (*newStones)[newNums.one]
+			(*newStones)[newNums.one] = existingNum1 + count
 			if newNums.two >= 0 {
-				existingNum2 := newStones[newNums.two]
-				newStones[newNums.two] = existingNum2 + count
+				existingNum2 := (*newStones)[newNums.two]
+				(*newStones)[newNums.two] = existingNum2 + count
 			}
 		}
-		stones = newStones
+
+		clear(*stones)
+		stones, newStones = newStones, stones
 	}
 
+	return *stones
+}
+
+func countStones(stones map[int]int) int {
 	sum := 0
 	for _, count := range stones {
 		sum += count
@@ -85,6 +118,7 @@ func doDay11Calc(stones map[int]int, iterations int) int {
 }
 
 func Day11Part2(logger *slog.Logger, input string, part1Context any) string {
-	first := parseDay11Input(input)
-	return strconv.Itoa(doDay11Calc(first, 75))
+	stones := part1Context.(map[int]int)
+	stones = doDay11Calc(stones, 50)
+	return strconv.Itoa(countStones(stones))
 }

@@ -2,6 +2,9 @@ package main
 
 import (
 	"log/slog"
+	"maps"
+	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,12 +42,6 @@ type gridPos struct {
 	row int
 	col int
 }
-type dirsArray [D6_LEFT + 1]bool
-
-type gridLocationState struct {
-	visited     bool
-	visitedDirs dirsArray
-}
 
 type obstacleHitState struct {
 	pos gridPos
@@ -54,14 +51,14 @@ type obstacleHitState struct {
 type d6context struct {
 	obstaclesByRow     [][]int
 	obstaclesByCol     [][]int
-	obstacleCandidates map[gridPos]nothing
+	obstacleCandidates []gridPos
 	startRow           int
 	startCol           int
 }
 
 func Day6Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
-	grid := make([][]gridLocationState, len(lines))
+	visited := make([][]bool, len(lines))
 	obstacles := make(map[gridPos]nothing)
 	obstaclesByRow := make([][]int, len(lines))
 	obstaclesByCol := make([][]int, len(lines[0]))
@@ -69,11 +66,22 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 		obstaclesByCol[ix] = make([]int, 0, 20)
 	}
 
+	// Parse the input. We're looking to build up the following.
+	// - startRow and startCol tell us where the guard starts.
+	// - grid will be used to track the guard's movements, and
+	//   records where the obstacles are in a way that's useful
+	//   for part 1.
+	// - obstaclesByRow records, for each row, the column indexes
+	//   that contain obstacles. Additionally recording obstacles
+	//   this way helps for part 2, where we don't need to
+	//   simulate the guard moving square by square but rather can
+	//   "teleport" him to the next obstacle in a given line.
+	// - obstaclesByCol is similar.
 	startRow, startCol := -1, -1
 	dir := D6_UP
 	for row, line := range lines {
 		obstaclesByRow[row] = make([]int, 0, 20)
-		grid[row] = make([]gridLocationState, len(line))
+		visited[row] = make([]bool, len(line))
 		for col, gridItem := range line {
 			if gridItem == '#' {
 				obstacles[gridPos{row, col}] = nothing{}
@@ -81,13 +89,13 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 				obstaclesByCol[col] = append(obstaclesByCol[col], row)
 			} else if gridItem == '^' {
 				startRow, startCol = row, col
-				grid[row][col].visited = true
-				grid[row][col].visitedDirs[D6_UP] = true
+				visited[row][col] = true
 			}
 		}
 	}
 
-	numRows, numCols := len(grid), len(grid[0])
+	// Simulate the guard moving around the grid.
+	numRows, numCols := len(visited), len(visited[0])
 	curRow, curCol := startRow, startCol
 	obstacleCandidates := make(map[gridPos]nothing)
 	visitedCount := 1
@@ -95,61 +103,122 @@ func Day6Part1(logger *slog.Logger, input string) (string, any) {
 		var inBounds bool
 		curRow, curCol, dir, inBounds = move(obstacles, curRow, curCol, numRows, numCols, dir)
 		if !inBounds {
+			// The guard has left the grid - we're done.
 			break
 		}
-		if !grid[curRow][curCol].visited {
+		if !visited[curRow][curCol] {
+			// This is the first time the guard has entered this space.
+			// Increase our count, which is our part 1 answer, and also
+			// record this space, as every space the guard visits is
+			// somewhere we'll need to consider generating a new obstacle
+			// in part 2.
 			obstacleCandidates[gridPos{curRow, curCol}] = nothing{}
 			visitedCount++
-			grid[curRow][curCol].visited = true
+			visited[curRow][curCol] = true
 		}
-		grid[curRow][curCol].visitedDirs[dir] = true
 	}
+
+	// Make sure we don't try to spawn an obstacle on top of the guard.
 	delete(obstacleCandidates, gridPos{startRow, startCol})
 
-	return strconv.Itoa(visitedCount), d6context{obstaclesByRow, obstaclesByCol, obstacleCandidates, startRow, startCol}
+	return strconv.Itoa(visitedCount), d6context{obstaclesByRow, obstaclesByCol, slices.Collect(maps.Keys(obstacleCandidates)), startRow, startCol}
 }
 
 func Day6Part2(logger *slog.Logger, input string, part1Context any) string {
 	context := part1Context.(d6context)
 
+	// The basic idea of how we tackle part 2 is that we're going to
+	// try spawning an obstacle at every location the guard visited
+	// in part 1.
+
+	// A bit of optimisation. In an earlier version of this code, we
+	// spawned a goroutine for every obstacle location we wanted to
+	// try. Every instance of trying an obstacle location requires a
+	// map (set, really) of obstacles that the guard has hit - but
+	// with ~2500 candidate obstacle locations in my input, we were
+	// spending half our runtime just on the memory allocations within
+	// those goroutines. So what we do now is to spawn only as many
+	// goroutines as we have CPU cores, and have each one process a
+	// number of obstacle candidates in series, reusing the same map
+	// for each candidate, which vastly brings down the allocations.
+	threads := runtime.NumCPU()
+	obstaclesPerThread := len(context.obstacleCandidates) / threads
 	c := make(chan int)
-	for candidate := range context.obstacleCandidates {
-		go tryFindLoop(context, candidate.row, candidate.col, c)
+
+	for ix := range threads {
+		go tryFindLoop(context, ix*obstaclesPerThread, obstaclesPerThread, c)
+	}
+	remainder := len(context.obstacleCandidates) % threads
+	if remainder > 0 {
+		go tryFindLoop(context, threads*obstaclesPerThread, remainder, c)
 	}
 
+	// Every candidate tried will send either a 0 or a 1 on the channel
+	// depending on whether that candidate caused a loop.
 	loopCount := 0
-	for i := 0; i < len(context.obstacleCandidates); i++ {
+	for range len(context.obstacleCandidates) {
 		loopCount += <-c
 	}
 
 	return strconv.Itoa(loopCount)
 }
 
-func tryFindLoop(context d6context, newObstacleRow int, newObstacleCol int, c chan int) {
+func tryFindLoop(context d6context, firstObstacleIx int, numObstacles int, c chan int) {
 	obstaclesHit := make(map[obstacleHitState]nothing, 150)
 
-	curRow, curCol, dir := context.startRow, context.startCol, D6_UP
-	for {
-		var inBounds, loopDetected bool
-		curRow, curCol, dir, inBounds, loopDetected = moveToNextObstacle(context.obstaclesByRow, context.obstaclesByCol, newObstacleRow, newObstacleCol, obstaclesHit, curRow, curCol, dir)
-		if !inBounds {
-			c <- 0
-			return
+	// As explained above, this function will process a number of obstacle
+	// candidates in series.
+	for ix := range numObstacles {
+		newObstacle := context.obstacleCandidates[firstObstacleIx+ix]
+		curRow, curCol, dir := context.startRow, context.startCol, D6_UP
+		for {
+			var inBounds, loopDetected bool
+			// Unlike in part 1, we don't need to move square by square. The
+			// guard will walk forwards until he either hits an obstacle or
+			// exits the grid, so we just figure out what's next in his path
+			// and teleport him straight there.
+			curRow, curCol, dir, inBounds, loopDetected = moveToNextObstacle(context.obstaclesByRow, context.obstaclesByCol, newObstacle.row, newObstacle.col, obstaclesHit, curRow, curCol, dir)
+			if !inBounds {
+				// The guard has left the grid before we detected a loop,
+				// so this obstacle candidate didn't cause a loop.
+				c <- 0
+				break
+			}
+			if loopDetected {
+				// The guard hit an obstacle that he's hit before, in the
+				// same direction, which means he's now looping. Report
+				// that, and we're done.
+				c <- 1
+				break
+			}
 		}
-		if loopDetected {
-			c <- 1
-			return
-		}
+
+		// Clear out the record of hit obstacles ready for the next candidate.
+		clear(obstaclesHit)
 	}
 }
 
 func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObstacleRow int, newObstacleCol int, obstaclesHit map[obstacleHitState]nothing, curRow int, curCol int, curDir direction6) (newRow int, newCol int, newDir direction6, inBounds bool, loopDetected bool) {
+	// As noted above, we don't need to move the guard square by
+	// square. We just want to figure out what's next in his path
+	// and teleport him straight there.
+
+	// If we're moving up or down, then the column isn't going to
+	// change from the current one, and we're going to hit an
+	// obstacle on the current column. Similarly, if we're moving
+	// left or right, the row isn't going to change and we'll hit
+	// an obstacle on this row. To simplify the code somewhat, we
+	// therefore initialise the final answers to the current
+	// position, and then create some pointers to the variables
+	// that we're going to change, so that later code doesn't care
+	// whether it's row or column that changes.
 	newRow, newCol, inBounds, loopDetected = curRow, curCol, false, false
 	obstacleHit := obstacleHitState{gridPos{curRow, curCol}, curDir}
 	var obstacles []int
 	var position, obstaclePosition *int
 	var rightwards bool
 	newObstacle := -1
+
 	if curDir == D6_UP || curDir == D6_DOWN {
 		obstacles = obstaclesByCol[curCol]
 		position = &newRow
@@ -168,14 +237,24 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObsta
 		}
 	}
 
+	// "rightwards" means row or column is increasing, so the
+	// next obstacle we'd hit is the one AFTER our current
+	// position.
 	if rightwards {
+		// Find the first obstacle that's after our current
+		// position.
 		for _, obstacle := range obstacles {
 			if obstacle > *position {
+				// To avoid moving lots of memory around, we
+				// don't actually add the candidate obstacle
+				// to the obstacles list - we just check
+				// against it separately.
 				if newObstacle > *position && newObstacle < obstacle {
 					// We'd hit the new obstacle first.
 					*obstaclePosition = newObstacle
 					*position = newObstacle - 1
 				} else {
+					// We'd hit the obstacle we just found.
 					*obstaclePosition = obstacle
 					*position = obstacle - 1
 				}
@@ -184,6 +263,11 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObsta
 			}
 		}
 	} else {
+		// We're moving "leftwards" (left or up), meaning we'd
+		// hit the obstacle immediately BEFORE our current
+		// position in the obstacles array. Work backwards
+		// from the end, so the first one we find with an
+		// earlier position is the one we'd hit.
 		for ix := len(obstacles) - 1; ix >= 0; ix-- {
 			if obstacles[ix] < *position {
 				if newObstacle < *position && newObstacle > obstacles[ix] {
@@ -200,8 +284,11 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObsta
 		}
 	}
 
+	// The code above won't catch us hitting the new obstacle
+	// if it's after the last one while heading rightwards,
+	// or before the first one while heading leftwards. We'll
+	// separately check that here.
 	if !inBounds && newObstacle > -1 {
-		// Check to see if the new obstacle would have stopped us going out of bounds.
 		if rightwards && newObstacle > *position {
 			*obstaclePosition = newObstacle
 			*position = newObstacle - 1
@@ -214,8 +301,14 @@ func moveToNextObstacle(obstaclesByRow [][]int, obstaclesByCol [][]int, newObsta
 	}
 
 	if inBounds {
+		// We've stayed in bounds, so we must have hit an
+		// obstacle. See if we've already hit that obstacle
+		// before, in the same direction. If we have, the
+		// guard is now looping.
 		_, loopDetected = obstaclesHit[obstacleHit]
 		if !loopDetected {
+			// First time hitting this obstacle in this
+			// direction - record it.
 			obstaclesHit[obstacleHit] = nothing{}
 		}
 	}

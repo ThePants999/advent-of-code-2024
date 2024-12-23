@@ -1,6 +1,7 @@
 package main
 
 import (
+	"iter"
 	"log/slog"
 	"maps"
 	"slices"
@@ -52,33 +53,73 @@ td-yn`,
 	ExamplePart2Answer: "co,de,ka,ta",
 }
 
+type ComputerSet map[string]*d23Computer
+
+func (set ComputerSet) Has(key string) bool {
+	_, found := set[key]
+	return found
+}
+
+func (first ComputerSet) Difference(second ComputerSet) ComputerSet {
+	set := make(ComputerSet, len(first))
+	for k, v := range first {
+		_, found := second[k]
+		if !found {
+			set[k] = v
+		}
+	}
+	return set
+}
+
+func (first ComputerSet) Intersection(second ComputerSet) ComputerSet {
+	var set ComputerSet
+	if len(first) > len(second) {
+		set = make(ComputerSet, len(second))
+		for k, v := range second {
+			_, found := first[k]
+			if found {
+				set[k] = v
+			}
+		}
+	} else {
+		set = make(ComputerSet, len(first))
+		for k, v := range first {
+			_, found := second[k]
+			if found {
+				set[k] = v
+			}
+		}
+	}
+	return set
+}
+
+func (set ComputerSet) findOrAdd(name string) *d23Computer {
+	computer, found := set[name]
+	if !found {
+		comp := newComputer(name)
+		computer = &comp
+		set[name] = computer
+	}
+	return computer
+}
+
 type d23Computer struct {
 	name        string
-	connections *set.Set
+	connections ComputerSet
 }
 
 func newComputer(name string) d23Computer {
-	return d23Computer{name, set.New()}
+	return d23Computer{name, make(ComputerSet)}
 }
 
 func Day23Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
-	computers := make(map[string]*d23Computer)
+	computers := make(ComputerSet)
 	for _, line := range lines {
-		comp1, found := computers[line[0:2]]
-		if !found {
-			computer := newComputer(line[0:2])
-			comp1 = &computer
-			computers[computer.name] = comp1
-		}
-		comp2, found := computers[line[3:5]]
-		if !found {
-			computer := newComputer(line[3:5])
-			comp2 = &computer
-			computers[computer.name] = comp2
-		}
-		comp1.connections.Insert(comp2)
-		comp2.connections.Insert(comp1)
+		comp1 := computers.findOrAdd(line[0:2])
+		comp2 := computers.findOrAdd(line[3:5])
+		comp1.connections[comp2.name] = comp2
+		comp2.connections[comp1.name] = comp1
 	}
 
 	sum := 0
@@ -89,12 +130,9 @@ func Day23Part1(logger *slog.Logger, input string) (string, any) {
 			continue
 		}
 
-		connsSlice := make([]*d23Computer, 0, comp1.connections.Len())
-		comp1.connections.Do(func(item any) {
-			connsSlice = append(connsSlice, item.(*d23Computer))
-		})
+		connsSlice := slices.Collect(maps.Values(comp1.connections))
 		for ix, comp2 := range connsSlice {
-			if handled.Has(comp2) {
+			if handled.Has(comp2.name) {
 				// This computer has already been comp1 in the
 				// past so we've counted all its connections
 				// already
@@ -105,14 +143,14 @@ func Day23Part1(logger *slog.Logger, input string) (string, any) {
 			// this one
 			for ix2 := ix + 1; ix2 < len(connsSlice); ix2++ {
 				comp3 := connsSlice[ix2]
-				if handled.Has(comp3) {
+				if handled.Has(comp3.name) {
 					// This computer has already been comp1 in the
 					// past so we've counted all its connections
 					// already
 					continue
 				}
 
-				if comp2.connections.Has(comp3) {
+				if comp2.connections.Has(comp3.name) {
 					// comp2 and comp3 are connected to each other
 					// as well as comp1
 					sum++
@@ -120,71 +158,54 @@ func Day23Part1(logger *slog.Logger, input string) (string, any) {
 			}
 		}
 
-		handled.Insert(comp1)
+		handled.Insert(comp1.name)
 	}
 
 	return strconv.Itoa(sum), computers
 }
 
 func Day23Part2(logger *slog.Logger, input string, part1Context any) string {
-	bestSet := set.New()
+	bestSet := make(ComputerSet)
+	computers := part1Context.(ComputerSet)
+	bronKerbosch(make(ComputerSet), computers, make(ComputerSet), &bestSet)
 
-	computers := set.New()
-	for comp := range maps.Values(part1Context.(map[string]*d23Computer)) {
-		computers.Insert(comp)
-	}
-	bronKerbosch(set.New(), computers, set.New(), &bestSet)
-
-	finalSet := make([]string, 0, bestSet.Len())
-	bestSet.Do(func(item any) {
-		finalSet = append(finalSet, item.(*d23Computer).name)
-	})
+	finalSet := slices.Collect(maps.Keys(bestSet))
 	slices.Sort(finalSet)
-	var sb strings.Builder
-	for _, name := range finalSet {
-		sb.WriteString(name)
-		sb.WriteRune(',')
-	}
-	answer := sb.String()
-	answer = answer[:len(answer)-1]
-
-	return answer
+	return strings.Join(finalSet, ",")
 }
 
-func bronKerbosch(r *set.Set, p *set.Set, x *set.Set, best **set.Set) {
-	if r.Len()+p.Len() <= (*best).Len() {
+func bronKerbosch(r ComputerSet, p ComputerSet, x ComputerSet, best *ComputerSet) {
+	if len(r)+len(p) <= len(*best) {
 		// We don't have enough candidate vertices left to exceed the
 		// biggest we've already found, give up here
 		return
 	}
 
-	if p.Len() == 0 && x.Len() == 0 {
+	if len(p) == 0 && len(x) == 0 {
 		// There's nothing more we could add, r is a maximal clique
-		if r.Len() > (*best).Len() {
+		if len(r) > len(*best) {
 			// And it's bigger than any other we've found so far
 			*best = r
 		}
 		return
 	}
 
-	// We want an arbitrary member of P or X, but the stupid fucking
-	// golang-collections set doesn't have any way to get such a thing
-	// that doesn't involve iterating over the entire set >:-(
-	var pivot any
-	p.Do(func(item any) {
-		pivot = item
-	})
-	if pivot == nil {
-		x.Do(func(item any) {
-			pivot = item
-		})
+	next, stop := iter.Pull(maps.Values(p))
+	pivot, ok := next()
+	stop()
+	if !ok {
+		next, stop = iter.Pull(maps.Values(x))
+		pivot, _ = next()
+		stop()
 	}
 
-	p.Difference(pivot.(*d23Computer).connections).Do(func(item any) {
-		itemSet := set.New(item)
-		neighbourSet := item.(*d23Computer).connections
-		bronKerbosch(r.Union(itemSet), p.Intersection(neighbourSet), x.Intersection(neighbourSet), best)
-		p.Remove(item)
-		x.Insert(item)
-	})
+	for k, v := range p.Difference(pivot.connections) {
+		newR := maps.Clone(r)
+		newR[k] = v
+		pIntersectNeighbours := p.Intersection(v.connections)
+		xIntersectNeighbours := x.Intersection(v.connections)
+		bronKerbosch(newR, pIntersectNeighbours, xIntersectNeighbours, best)
+		delete(p, k)
+		x[k] = v
+	}
 }

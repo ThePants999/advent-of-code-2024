@@ -22,3 +22,33 @@ go build
 
 You'll be prompted for your session cookie so that it can download your inputs for you.
 
+## Execution times
+
+Averages over a thousand executions.
+
+| Day | Median | Mean |
+| ------- | ------- | ------- |
+| 1 | 95µs | 114µs |
+| 2 | 168µs | 198µs |
+| 3 | 181µs | 208µs |
+| 4 | 843µs | 769µs |
+| 5 | 942µs | 727µs |
+| 6 | 7.034ms | 7.336ms |
+| 7 | 6.622ms | 7.475ms |
+| 8 | 257µs | 276µs |
+| 9 | 3.960ms | 3.664ms |
+| 10 | 1.44ms | 1.471ms |
+| 11 | 7.867ms | 8.201ms |
+| 12 | | |
+| 13 | 18µs | 26µs |
+| 14 | 592µs | 684µs |
+| 15 | 603µs | 704µs |
+| 16 | 6.994ms | 5.489ms |
+| 17 | 27µs | 32µs |
+| 18 | 543µs | 696µs |
+| 19 | 2.416ms | 2.66ms |
+| 20 | 2.574ms | 2.912ms |
+| 21 | 25µs | 24µs |
+| 22 | 7.107ms | 9.096ms |
+| 23 | 2.076ms | 2.066ms |
+| 24 | 80µs | 107µs |

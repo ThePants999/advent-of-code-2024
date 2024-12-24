@@ -5,6 +5,8 @@ I used AoC this year to learn Go - I hadn't written a line of it before December
 
 What I *do* have here is consistently Pretty Decent™ solutions. I set out with the goal of having a total cumulative runtime for all 25 days together of under a second, but I knocked that out of the park - I've actually managed a total runtime of under 70ms on my machine (Ryzen 5600X), with every single day executing under 10ms, and half under 1ms. There's also enough commenting that you should be able to follow what's going on. So hopefully this will be a useful repository for anyone wanting inspiration for what a Pretty Decent™ solution looks like for any given day.
 
+![Screenshot showing total runtime under 60ms](https://github.com/user-attachments/assets/0cfbfafb-3d25-4176-8860-446aa34ed55b)
+
 ## Framework
 
 It also showcases the value in having a framework. If you take a glance at the code in here, you'll see that upwards of 99% is directly solving AoC problems, as everything like downloading/caching inputs or timing execution is taken care of by my framework - https://github.com/ThePants999/advent-of-code-go-runner. It's not currently robust or well-documented, so it won't impress you, but it might inspire you to create your own if you don't have one. Or, if you don't care about that robustness malarkey and you're writing Go yourself, you're free to use it.
@@ -39,7 +41,7 @@ Averages over a thousand executions.
 | 9 | 3.960ms | 3.664ms |
 | 10 | 1.44ms | 1.471ms |
 | 11 | 7.867ms | 8.201ms |
-| 12 | | |
+| 12 | 8.412ms | 8.875ms |
 | 13 | 18µs | 26µs |
 | 14 | 592µs | 684µs |
 | 15 | 603µs | 704µs |

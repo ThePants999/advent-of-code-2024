@@ -5,7 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/golang-collections/collections/set"
 	stack "github.com/golang-collections/collections/stack"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
@@ -32,35 +31,46 @@ MMMISSJEEE`,
 type nothing struct{}
 
 type region struct {
-	char  rune
-	plots map[gridPos]nothing
+	char     rune
+	plots    [][]bool
+	plotsArr []gridPos
+}
+
+func newRegion(char rune, gridSize int) region {
+	r := region{char, make([][]bool, gridSize), make([]gridPos, 0, 20)}
+	for i := range gridSize {
+		r.plots[i] = make([]bool, gridSize)
+	}
+	return r
 }
 
 func Day12Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
 	grid := make([][]rune, len(lines))
+	usedplots := make([][]bool, len(lines))
 	for rowIx, line := range lines {
 		grid[rowIx] = make([]rune, len(line))
+		usedplots[rowIx] = make([]bool, len(line))
 		for colIx, char := range line {
 			grid[rowIx][colIx] = char
 		}
 	}
 
 	regions := make([]region, 0, 100)
-	usedplots := set.New()
 	for rowIx, row := range grid {
 		for colIx, char := range row {
 			loc := gridPos{rowIx, colIx}
-			if !usedplots.Has(loc) {
+			if !usedplots[loc.row][loc.col] {
 				// New region
-				region := region{char, make(map[gridPos]nothing)}
+				region := newRegion(char, len(grid))
 				s := stack.New()
 				s.Push(loc)
 				for s.Len() > 0 {
 					loc = s.Pop().(gridPos)
-					if grid[loc.row][loc.col] == region.char && !usedplots.Has(loc) {
-						usedplots.Insert(loc)
-						region.plots[loc] = nothing{}
+					if grid[loc.row][loc.col] == region.char && !usedplots[loc.row][loc.col] {
+						usedplots[loc.row][loc.col] = true
+						region.plots[loc.row][loc.col] = true
+						region.plotsArr = append(region.plotsArr, loc)
 						adjs := loc.adjacencies(len(grid), len(grid[0]))
 						for _, adj := range adjs {
 							s.Push(adj)
@@ -75,8 +85,7 @@ func Day12Part1(logger *slog.Logger, input string) (string, any) {
 	price := calcTotalPrice(&regions, func(r *region, pos gridPos) int {
 		fences := 4
 		for _, adj := range pos.adjacencies(len(grid), len(grid[0])) {
-			_, found := r.plots[adj]
-			if found {
+			if r.plots[adj.row][adj.col] {
 				fences--
 			}
 		}
@@ -101,11 +110,11 @@ func calcTotalPrice(regions *[]region, plotWeight func(*region, gridPos) int) in
 func (r *region) calcPrice(plotWeight func(*region, gridPos) int, c chan int) {
 	weight := 0
 
-	for p := range r.plots {
+	for _, p := range r.plotsArr {
 		weight += plotWeight(r, p)
 	}
 
-	c <- weight * len(r.plots)
+	c <- weight * len(r.plotsArr)
 }
 
 func Day12Part2(logger *slog.Logger, input string, part1Context any) string {
@@ -113,10 +122,6 @@ func Day12Part2(logger *slog.Logger, input string, part1Context any) string {
 	price := calcTotalPrice(regions, func(r *region, pos gridPos) int {
 		vertices := 0
 
-		// Conveniently, we don't have to worry about bounds checking here
-		// as we only care whether an adjacent plot is within the region,
-		// so we don't care whether the answer is "no" because it's a valid
-		// plot in a different region or because it's an invalid plot.
 		allAdj := [9]gridPos{
 			{pos.row - 1, pos.col},
 			{pos.row - 1, pos.col + 1},
@@ -130,7 +135,8 @@ func Day12Part2(logger *slog.Logger, input string, part1Context any) string {
 		}
 		var inRegion [9]bool
 		for ix := 0; ix < 9; ix++ {
-			_, inRegion[ix] = r.plots[allAdj[ix]]
+			adj := allAdj[ix]
+			inRegion[ix] = adj.row >= 0 && adj.row < len(r.plots) && adj.col >= 0 && adj.col < len(r.plots[adj.row]) && r.plots[allAdj[ix].row][allAdj[ix].col]
 		}
 
 		for dir := UP_RIGHT; dir <= UP_LEFT; dir += 2 {

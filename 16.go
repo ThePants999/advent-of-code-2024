@@ -177,16 +177,25 @@ type d16context struct {
 }
 
 func updateFrom(grid [][]d16GridSquare, node *d16Node) {
+	// Per Dijkstra's algorithm, update the costs of nodes reachable from this one
+	// (which are: moving forwards, turning left, turning right). However, we don't
+	// bother to assign costs to turning left and right if they would face a wall
+	// as we trivially know that's never going to be optimal.
 	frontPos := node.id.pos.move(node.id.dir)
 	leftDir := node.id.dir.turn(false)
+	leftPos := node.id.pos.move(leftDir)
 	rightDir := node.id.dir.turn(true)
-	if node.cost+1000 < grid[node.id.pos.row][node.id.pos.col].nodes[leftDir].cost {
+	rightPos := node.id.pos.move(rightDir)
+	if !grid[leftPos.row][leftPos.col].wall && node.cost+1000 < grid[node.id.pos.row][node.id.pos.col].nodes[leftDir].cost {
 		grid[node.id.pos.row][node.id.pos.col].nodes[leftDir].UpdateCost(node.cost + 1000)
 	}
-	if node.cost+1000 < grid[node.id.pos.row][node.id.pos.col].nodes[rightDir].cost {
+	if !grid[rightPos.row][rightPos.col].wall && node.cost+1000 < grid[node.id.pos.row][node.id.pos.col].nodes[rightDir].cost {
 		grid[node.id.pos.row][node.id.pos.col].nodes[rightDir].UpdateCost(node.cost + 1000)
 	}
 	if node.cost+1 < grid[frontPos.row][frontPos.col].nodes[node.id.dir].cost {
+		// Node that there's no need to check to see whether there's a wall in front
+		// of us - walls nodes never get initialised with an infinite cost, so they'll
+		// always appear to be 0-cost already, but they're also not on the heap.
 		grid[frontPos.row][frontPos.col].nodes[node.id.dir].UpdateCost(node.cost + 1)
 	}
 }
@@ -209,6 +218,10 @@ func Day16Part1(logger *slog.Logger, input string) (string, any) {
 				endRow, endCol = rowIx, colIx
 			}
 
+			// Every space that's not a wall needs to be a graph node
+			// (well, technically, four graph nodes, one per direction)
+			// and to be in the priority queue for the upcoming
+			// Dijkstra.
 			if !grid[rowIx][colIx].wall {
 				for dir := D6_UP; dir <= D6_LEFT; dir++ {
 					grid[rowIx][colIx].nodes[dir].id.pos = gridPos{rowIx, colIx}
@@ -222,11 +235,14 @@ func Day16Part1(logger *slog.Logger, input string) (string, any) {
 
 	// Run Dijkstra's algorithm over the maze, treating each combination
 	// of grid position and facing as a different node in the graph.
-	// We run it fully, rather than stopping as soon as we reach the
-	// end, to ensure we've found all the best routes, as needed for part 2.
 	grid[startRow][startCol].nodes[D6_RIGHT].UpdateCost(0)
 	for !heap.IsEmpty() {
 		node := heap.Pop()
+		if node.id.pos.row == endRow && node.id.pos.col == endCol {
+			// Once we've popped the end, no other nodes can be on a best
+			// path.
+			break
+		}
 		updateFrom(grid, node)
 	}
 

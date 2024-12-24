@@ -219,10 +219,17 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 func shrinkGap(gap *diskElement, gaps [][]*diskElement, newSize int) {
 	// Remove this gap from the lists of gaps larger than its new size.
 	for gapLen := gap.len; gapLen > newSize; gapLen-- {
-		if gaps[gapLen][0] == gap {
+		gapIx := slices.Index(gaps[gapLen], gap)
+		if gapIx < len(gaps[gapLen])/2 {
+			// This gap is less than half way along the list - it's
+			// less work to shift preceding gaps forwards.
+			for ix := gapIx; ix > 0; ix-- {
+				gaps[gapLen][ix] = gaps[gapLen][ix-1]
+			}
 			gaps[gapLen] = gaps[gapLen][1:]
 		} else {
-			gapIx := slices.Index(gaps[gapLen], gap)
+			// This is in the second half of gaps at this size - easier
+			// to shift the rest of the slice backwards.
 			gaps[gapLen] = slices.Delete(gaps[gapLen], gapIx, gapIx+1)
 		}
 	}

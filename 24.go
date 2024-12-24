@@ -1,18 +1,11 @@
 package main
 
 import (
-	"bytes"
-	"context"
-	"fmt"
 	"log/slog"
-	"maps"
-	"os"
 	"strconv"
 	"strings"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
-	"github.com/goccy/go-graphviz"
-	"github.com/goccy/go-graphviz/cgraph"
 )
 
 var Day24 = runner.DayImplementation{
@@ -80,33 +73,15 @@ const (
 
 type d24InputProvider interface {
 	provide() bool
-	drawGraph(*graphviz.Graph, *cgraph.Node)
 }
 
 type d24FixedInput struct {
 	name  string
 	value bool
-	node  *cgraph.Node
 }
 
 func (input *d24FixedInput) provide() bool {
 	return input.value
-}
-
-func (input *d24FixedInput) drawGraph(graph *graphviz.Graph, to *cgraph.Node) {
-	var err error
-	if input.node == nil {
-		input.node, err = graph.CreateNodeByName(input.name)
-		if err != nil {
-			panic(err)
-		}
-	}
-	var edge *cgraph.Edge
-	edge, err = graph.CreateEdgeByName(input.name, input.node, to)
-	if err != nil {
-		panic(err)
-	}
-	edge.SetLabel("")
 }
 
 type d24Wire struct {
@@ -122,8 +97,6 @@ type d24Gate struct {
 	input1   *d24Wire
 	input2   *d24Wire
 	output   *d24Wire
-	level    int
-	node     *cgraph.Node
 }
 
 func (gate *d24Gate) operatorString() string {
@@ -135,27 +108,6 @@ func (gate *d24Gate) operatorString() string {
 	default:
 		return "XOR"
 	}
-}
-
-func (gate *d24Gate) drawGraph(graph *graphviz.Graph, to *cgraph.Node) {
-	var err error
-	if gate.node == nil {
-		gate.node, err = graph.CreateNodeByName(fmt.Sprintf("%s %s %s", gate.input1N, gate.operatorString(), gate.input2N))
-		if err != nil {
-			panic(err)
-		}
-		gate.node.SetLabel(gate.operatorString())
-		//gate.node.SetPenWidth(3.0)
-		gate.node.SetShape(cgraph.TriangleShape)
-	}
-	var edge *cgraph.Edge
-	edge, err = graph.CreateEdgeByName(gate.outputN, gate.node, to)
-	if err != nil {
-		panic(err)
-	}
-	edge.SetLabel(gate.outputN)
-	gate.input1.provider.drawGraph(graph, gate.node)
-	gate.input2.provider.drawGraph(graph, gate.node)
 }
 
 func (gate *d24Gate) provide() bool {
@@ -170,25 +122,8 @@ func (gate *d24Gate) provide() bool {
 	}
 }
 
-func (gate *d24Gate) setLevel(level int) int {
-	maxLevel := level
-	gate.level = level
-	gate1, ok := gate.input1.provider.(*d24Gate)
-	if ok {
-		maxLevel = gate1.setLevel(level + 1)
-	}
-	gate2, ok := gate.input2.provider.(*d24Gate)
-	if ok {
-		newMax := gate2.setLevel(level + 1)
-		if newMax > maxLevel {
-			maxLevel = newMax
-		}
-	}
-	return maxLevel
-}
-
 func newGate(operator d24Operator, input1 string, input2 string, output string, wires map[string]*d24Wire) *d24Gate {
-	gate := d24Gate{operator, input1, input2, output, nil, nil, nil, -1, nil}
+	gate := d24Gate{operator, input1, input2, output, nil, nil, nil}
 	var found bool
 	gate.input1, found = wires[input1]
 	if !found {
@@ -211,30 +146,20 @@ func newGate(operator d24Operator, input1 string, input2 string, output string, 
 }
 
 type d24Circuit struct {
-	wires        map[string]*d24Wire
-	gates        map[string]*d24Gate
-	gatesByLevel [][]*d24Gate
-	outputWires  []*d24Wire
-	correctZ     int64
-	originalZ    int64
+	wires       map[string]*d24Wire
+	gates       map[string]*d24Gate
+	outputWires []*d24Wire
+	correctZ    int64
+	originalZ   int64
 }
 
 func newCircuit(wires map[string]*d24Wire, gates map[string]*d24Gate) *d24Circuit {
 	outputWires := make([]*d24Wire, 64)
 	var x, y int64
-	maxLevel := 0
 	for ix := range 64 {
 		onesRune := '0' + rune(ix%10)
 		tensRune := '0' + rune(ix/10)
 		outputWires[ix] = wires[string([]rune{'z', tensRune, onesRune})]
-
-		if outputWires[ix] != nil {
-			outputGate := outputWires[ix].provider.(*d24Gate)
-			newMax := outputGate.setLevel(0)
-			if newMax > maxLevel {
-				maxLevel = newMax
-			}
-		}
 
 		xWire, found := wires[string([]rune{'x', tensRune, onesRune})]
 		if found && xWire.provider.provide() {
@@ -247,15 +172,7 @@ func newCircuit(wires map[string]*d24Wire, gates map[string]*d24Gate) *d24Circui
 		}
 	}
 
-	gatesByLevel := make([][]*d24Gate, maxLevel+1)
-	for ix := range maxLevel {
-		gatesByLevel[ix] = make([]*d24Gate, 0)
-	}
-	for gate := range maps.Values(gates) {
-		gatesByLevel[gate.level] = append(gatesByLevel[gate.level], gate)
-	}
-
-	return &d24Circuit{wires, gates, gatesByLevel, outputWires, x + y, 0}
+	return &d24Circuit{wires, gates, outputWires, x + y, 0}
 }
 
 func (circuit *d24Circuit) zValue() int64 {
@@ -284,7 +201,7 @@ func parseD24Input(input string) *d24Circuit {
 			val = true
 		}
 
-		input := d24FixedInput{line[0:3], val, nil}
+		input := d24FixedInput{line[0:3], val}
 		wires[line[0:3]] = &d24Wire{line[0:3], &input}
 	}
 
@@ -325,43 +242,7 @@ func Day24Part2(logger *slog.Logger, input string, part1Context any) string {
 	// 	return ""
 	// }
 
-	circuit := part1Context.(*d24Circuit)
-
-	ctx := context.Background()
-	g, err := graphviz.New(ctx)
-	if err != nil {
-		panic(err)
-	}
-
-	graph, err := g.Graph()
-	if err != nil {
-		panic(err)
-	}
-	defer func() {
-		if err := graph.Close(); err != nil {
-			panic(err)
-		}
-		g.Close()
-	}()
-
-	for _, wire := range circuit.outputWires {
-		if wire != nil {
-			node, err := graph.CreateNodeByName(wire.name)
-			if err != nil {
-				panic(err)
-			}
-			wire.provider.drawGraph(graph, node)
-		}
-	}
-
-	// if err := g.RenderFilename(ctx, graph, graphviz.PNG, "./graph.png"); err != nil {
-	// 	panic(err)
-	// }
-	var buf bytes.Buffer
-	if err := g.Render(ctx, graph, "dot", &buf); err != nil {
-		panic(err)
-	}
-	os.WriteFile("./graph.dot", buf.Bytes(), 0777)
+	//circuit := part1Context.(*d24Circuit)
 
 	return ""
 }

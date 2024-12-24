@@ -19,6 +19,9 @@ var Day1 = runner.DayImplementation{
 }
 
 func Day1Part1(logger *slog.Logger, input string) (string, any) {
+	// Split on any amount of whitespace, following which
+	// we can direct even and odd elements into separate
+	// lists.
 	numbers := strings.Fields(input)
 	var list1, list2 []int = make([]int, 0, len(numbers)/2), make([]int, 0, len(numbers)/2)
 
@@ -34,6 +37,9 @@ func Day1Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	// Part 1 just requires that we sort the lists before
+	// performing an element-wise comparison. We'll leave
+	// that to the standard library.
 	slices.Sort(list1)
 	slices.Sort(list2)
 
@@ -52,11 +58,17 @@ func Day1Part1(logger *slog.Logger, input string) (string, any) {
 func Day1Part2(logger *slog.Logger, input string, part1Context any) string {
 	lists := part1Context.([][]int)
 	list1, list2 := lists[0], lists[1]
+
+	// Calculate frequencies by iterating through the
+	// right-hand list and incrementing values in a map.
 	m := make(map[int]int)
 	for _, val := range list2 {
 		m[val] = m[val] + 1
 	}
 
+	// Similarity scores are then elements in the left-
+	// hand list multiplied by their frequency in the
+	// right.
 	similarityScore := 0
 	for _, val := range list1 {
 		similarityScore += val * m[val]

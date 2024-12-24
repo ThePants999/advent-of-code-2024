@@ -76,6 +76,7 @@ func (prog *d17Program) Execute() []int {
 }
 
 func Day17Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse the input.
 	lines := strings.Split(input, "\n")
 	prog := d17Program{}
 	prog.regA, _ = strconv.Atoi(lines[0][12:])
@@ -87,6 +88,8 @@ func Day17Part1(logger *slog.Logger, input string) (string, any) {
 		prog.data[ix], _ = strconv.Atoi(str)
 	}
 
+	// Part 1 is simple enough - genuinely run the
+	// program.
 	progCopy := prog
 	output := progCopy.Execute()
 	var result strings.Builder

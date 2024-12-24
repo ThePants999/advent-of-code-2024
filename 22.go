@@ -63,15 +63,38 @@ func (buyer *d22Buyer) updateSecretAndDelta() int {
 }
 
 func (buyer *d22Buyer) hasSeenCurrentDelta() bool {
+	// Bit of shenanigans here. We want a data structure
+	// that allows us to very efficiently answer the
+	// question "has buyer X seen delta sequence Y before".
+	// Maps are slower than I'd like. But because we store
+	// delta sequences as 20-bit values, if we can store
+	// the answer to this question as a single bit, then
+	// we can do so for every possible delta sequence
+	// (2^20) for 3200 buyers in 400MB RAM, which is
+	// reasonable. So what we have here is an array of
+	// 2^20 arrays of 100 uint32s, where each buyer
+	// corresponds to one bit in one of those uint32s.
 	return deltasSeenBy[buyer.deltas][buyer.seenByIndex]&buyer.seenByBit != 0
 }
 
 func (buyer *d22Buyer) recordCurrentPrice(price int) {
+	// Use atomic operations to allow us to update these
+	// from different threads without any locking.
 	atomic.OrUint32(&deltasSeenBy[buyer.deltas][buyer.seenByIndex], buyer.seenByBit)
 	atomic.AddUint32(&priceForDeltas[buyer.deltas], uint32(price))
 }
 
 func (buyer *d22Buyer) generateAllSecrets(c chan int) {
+	// The procedure here is that we do go through each of the
+	// 2000 secret number updates, but we figure everything out
+	// in that single pass.
+	//
+	// We maintain the last four price deltas as a single
+	// 20-bit number. We can then use that as a key into
+	// an effectively per-buyer record of whether this buyer
+	// has seen that sequence before, and a global record of
+	// what the total price all buyers pay when they see that
+	// sequence is.
 	for ix := range 2000 {
 		price := buyer.updateSecretAndDelta()
 
@@ -96,6 +119,9 @@ func Day22Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Fields(input)
 	buyers := make([]d22Buyer, 0, len(lines))
 
+	// Each buyer is completely independent. So as we parse
+	// each one from the input, kick off a goroutine to start
+	// modelling it.
 	c := make(chan int)
 	for ix, line := range lines {
 		secret, _ := strconv.Atoi(line)
@@ -104,6 +130,7 @@ func Day22Part1(logger *slog.Logger, input string) (string, any) {
 		go buyer.generateAllSecrets(c)
 	}
 
+	// Collate results.
 	sum := 0
 	for range buyers {
 		sum += <-c
@@ -113,6 +140,9 @@ func Day22Part1(logger *slog.Logger, input string) (string, any) {
 }
 
 func Day22Part2(logger *slog.Logger, input string, part1Context any) string {
+	// We already calculated, during part 1, the total
+	// price buyers pay for every delta they see. So
+	// all we need to do now is find the highest.
 	var bestResult uint32
 	for deltas := range MAX_DELTAS {
 		if priceForDeltas[deltas] > bestResult {

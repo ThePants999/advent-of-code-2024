@@ -37,6 +37,12 @@ v^^>>><<^^<>>^v^<v^vv<>v^<<>^<^v^v><^<<<><<^<v><v<>vv>>v><v^<vv<>v^<<^`,
 	ExamplePart2Answer: "9021",
 }
 
+// There isn't much to say about today, so I'm not going to
+// thoroughly comment throughout. We're just genuinely simulating
+// robot movement and pushing boxes around, it's plenty fast enough.
+// The challenge of the day is just being sure to get the logic
+// right.
+
 type gridContents int
 
 const (

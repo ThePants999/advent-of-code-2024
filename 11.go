@@ -23,6 +23,21 @@ var Day11 = runner.DayImplementation{
 	ExamplePart2Answer: "65601038650482",
 }
 
+// The approach we take here is stone counting. Let's
+// say that at time T we have A stones of value W and
+// B stones of value X. When you blink at a W, it
+// changes into a Y and a Z. When you blink at an X,
+// it changes into Y. At time T+1, we therefore have
+// A+B stones of value Y, and A stones of value Z
+// (and of course 0 Ws and 0 Xs). The order doesn't
+// matter, so we just store how many we have of each
+// stone, in a map.
+//
+// You'd think that some sort of caching/memoisation
+// would also help, but in my testing that actually
+// slowed things down vs this implementation. Map
+// operations can be expensive.
+
 func Day11Part1(logger *slog.Logger, input string) (string, any) {
 	first := parseDay11Input(input)
 	stones := doDay11Calc(first, 25)
@@ -76,10 +91,20 @@ func countDigits(num int) int {
 }
 
 func doDay11Calc(inputStones map[int]int, iterations int) map[int]int {
+	// Each time we blink at all the stones, we need to
+	// forget the old stone counts and entirely replace
+	// them with new stone counts. However, to avoid the
+	// overhead of allocating a new map each time, we
+	// alternate between using two different maps, simply
+	// clearing each one out when we're done with it.
 	secondStones := make(map[int]int)
 	stones, newStones := &inputStones, &secondStones
 	for i := 0; i < iterations; i++ {
+		// Go through each unique stone value we currently
+		// have.
 		for num, count := range *stones {
+			// Figure out what stones of that value turn
+			// into on a blink.
 			var newNums intPair
 			if num == 0 {
 				newNums = intPair{1, -1}
@@ -93,6 +118,8 @@ func doDay11Calc(inputStones map[int]int, iterations int) map[int]int {
 				}
 			}
 
+			// Record updated quantities of the new
+			// stone values.
 			existingNum1 := (*newStones)[newNums.one]
 			(*newStones)[newNums.one] = existingNum1 + count
 			if newNums.two >= 0 {
@@ -119,6 +146,9 @@ func countStones(stones map[int]int) int {
 
 func Day11Part2(logger *slog.Logger, input string, part1Context any) string {
 	stones := part1Context.(map[int]int)
+	// We've still got our "what do we have after 25
+	// blinks" state, so we just need to do another
+	// 50 to get to 75.
 	stones = doDay11Calc(stones, 50)
 	return strconv.Itoa(countStones(stones))
 }

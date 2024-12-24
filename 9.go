@@ -21,6 +21,9 @@ var Day9 = runner.DayImplementation{
 // Pity it's 100% useless for part 2.
 
 func Day9Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse input. We're not going to model the
+	// hard drive - we just want to know the size
+	// of each file and each gap.
 	files := make([]int, 0, len(input)/2)
 	gaps := make([]int, 0, len(input)/2)
 	for ix, char := range input {
@@ -32,8 +35,16 @@ func Day9Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	// The approach we're going to take here is to calculate
+	// the checksum on the fly. We're going to alternate
+	// between reading files from left to right and right to
+	// left, which works as though the files on the right
+	// were filling the gaps between files on the left.
 	ix, left_file_ix, right_file_ix, right_file_subix, gap_ix := 0, 0, len(files)-1, 0, 0
 	checksum := 0
+	// Each iteration of the outer loop handles one
+	// combination of file on the left and gap on the
+	// left.
 	for {
 		// Fully append the next file on the left.
 		for i := 0; i < files[left_file_ix]; i++ {
@@ -74,6 +85,14 @@ func Day9Part1(logger *slog.Logger, input string) (string, any) {
 
 	return strconv.Itoa(checksum), nil
 }
+
+// Part 2 uses a completely different data model. This time,
+// we are actually going to model the hard drive - but not
+// as a series of individual blocks, but as a series of
+// "elements", each of which is either a whole file or a
+// gap. The elements form a doubly-linked list, so it's
+// efficient to take one out of its current location and
+// reinsert it elsewhere.
 
 type diskElement struct {
 	disk *disk
@@ -141,6 +160,11 @@ type disk struct {
 }
 
 func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
+	// We're going to maintain a record of the locations of
+	// all gaps of at least X blocks. In other words, gaps[6]
+	// contains every gap that is 6 blocks or wider, in the
+	// order in which they appear on the disk. That way, it's
+	// easy to figure out where to put a file we're moving.
 	gaps := make([][]*diskElement, 10)
 	for size := 1; size < 10; size++ {
 		gaps[size] = make([]*diskElement, 0, len(input)/5)
@@ -150,6 +174,7 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 	files := make([]*diskElement, 0, len(input)/2)
 	pos := 0
 
+	// Parse the input again, now into this new scheme.
 	for ix, char := range input {
 		len := int(char - '0')
 		if len > 0 {
@@ -158,10 +183,14 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 
 			element.len = len
 			if ix%2 == 0 {
+				// This item is a file.
 				element.file = true
 				element.id = ix / 2
 				files = append(files, &element)
 			} else {
+				// This item is a gap. We need to append
+				// it to all the appropriately-sized gap
+				// slices.
 				for gapSize := 1; gapSize <= element.len; gapSize++ {
 					gaps[gapSize] = append(gaps[gapSize], &element)
 				}
@@ -172,7 +201,7 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 		}
 	}
 
-	// Perform compaction.
+	// Perform compaction. Go through each file right to left.
 	for file_ix := len(files) - 1; file_ix >= 0; file_ix-- {
 		file := files[file_ix]
 		if len(gaps[file.len]) > 0 {
@@ -201,6 +230,9 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 		}
 	}
 
+	// Now every file is in the right place, calculate the checksum
+	// again. This time, we go element by element, then block by
+	// block within each element.
 	ix, checksum := 0, 0
 	for element := disk.first; element != nil; element = element.next {
 		if element.file {
@@ -218,6 +250,14 @@ func Day9Part2(logger *slog.Logger, input string, part1Context any) string {
 
 func shrinkGap(gap *diskElement, gaps [][]*diskElement, newSize int) {
 	// Remove this gap from the lists of gaps larger than its new size.
+	// The price we pay for extremely efficient moving of files is
+	// that maintaining the gap arrays isn't super efficient. A lot
+	// of the time, we'll be removing the first element in the array,
+	// which is very cheap with Go's slicing logic. But we'll also
+	// inevitably end up doing some memcopying when that's not the
+	// case. We can minimise it by being smart about whether we bring
+	// the subsequent list elements leftwards, or bump the preceding
+	// ones rightwards.
 	for gapLen := gap.len; gapLen > newSize; gapLen-- {
 		gapIx := slices.Index(gaps[gapLen], gap)
 		if gapIx < len(gaps[gapLen])/2 {

@@ -46,6 +46,8 @@ func (p gridPos) adjacenciesUnbounded() []gridPos {
 }
 
 func Day20Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse the input - build up the complete grid,
+	// and also record the start and end co-ordinates.
 	lines := strings.Fields(input)
 	numRows := len(lines)
 	numCols := len(lines[0])
@@ -71,6 +73,8 @@ func Day20Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	// Figure out the path through, and record the
+	// point in time at which we reach each grid square.
 	cur := start
 	dist := 0
 	for cur != end {
@@ -85,6 +89,10 @@ func Day20Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	// The approach we take for part 1 is simplistic - we're going to
+	// look at every wall, and figure out whether the spaces above and
+	// below and/or left and right constitute a cheat that saves time
+	// over the threshold.
 	sum := 0
 	threshold := 0
 	if numRows > 20 {
@@ -130,6 +138,16 @@ func Day20Part2(logger *slog.Logger, input string, part1Context any) string {
 		threshold = 100
 	}
 
+	// Our approach to part 2 is a little different, though only
+	// a little. This time, we're going to look at every point
+	// that's on the course, and then consider the diamond of
+	// points around it that you could get to within 20 time
+	// units and figure out whether each one constitutes a
+	// qualifying cheat. So pretty much brute force, except
+	// that we can consider different starting points
+	// independently and in parallel - to take straightforward
+	// advantage of that, we give each row of the grid to a
+	// separate goroutine.
 	c := make(chan int)
 	for rowIx := 1; rowIx < len(grid)-1; rowIx++ {
 		go day20Part2HandleRow(grid, threshold, rowIx, c)

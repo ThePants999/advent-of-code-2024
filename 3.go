@@ -2,7 +2,6 @@ package main
 
 import (
 	"log/slog"
-	"regexp"
 	"strconv"
 
 	runner "github.com/ThePants999/advent-of-code-go-runner"
@@ -17,15 +16,38 @@ var Day3 = runner.DayImplementation{
 	ExamplePart2Answer: "48",
 }
 
+// Who needs regular expressions when you can simply
+// implement a hilariously overcomplicated finite
+// state machine? (By virtue of being specialised, this
+// approach is unsurprisingly faster.)
+
 type Action int
 
 const (
+	// Clear any buffers, as we won't be in the
+	// middle of anything after this character.
 	ACTION_RESET Action = iota
+
+	// Take no action.
 	ACTION_ACCEPTED
+
+	// Append this item to the buffer for operand
+	// 1.
 	ACTION_OPERAND_1
+
+	// Append this item to the buffer for operand
+	// 2.
 	ACTION_OPERAND_2
+
+	// Record that we're now disabled (i.e. start
+	// passing disabled=true into handleCharacter.)
 	ACTION_DISABLE
+
+	// Record that we're enabled (i.e. undo the above).
 	ACTION_ENABLE
+
+	// The current operation has been fully parsed
+	// and is valid; execute it.
 	ACTION_COMPLETED
 )
 
@@ -47,8 +69,13 @@ const (
 	STATE_OPERAND_2
 )
 
+// Given the combination of what state we're in and
+// what character we just found, move to a new state
+// and take an appropriate action.
 func handleCharacter(char rune, state State, disabled bool) (Action, State) {
 	if disabled && state == STATE_INITIAL && char != 'd' {
+		// We're currently inside a "don't()" block, so we ignore
+		// everything until we find a "do()".
 		return ACTION_RESET, STATE_INITIAL
 	}
 
@@ -117,6 +144,11 @@ func Day3Part1(logger *slog.Logger, input string) (string, any) {
 	var operand1, operand2, sum int
 	state := STATE_INITIAL
 	var action Action
+
+	// Pretty simple - handle one character at a time,
+	// maintaining buffers for operands 1 and 2, and then
+	// adding their product to our cumulative total once
+	// fully parsed.
 	for _, char := range input {
 		action, state = handleCharacter(char, state, false)
 		switch action {
@@ -143,6 +175,10 @@ func Day3Part2(logger *slog.Logger, input string, part1Context any) string {
 	state := STATE_INITIAL
 	disabled := false
 	var action Action
+
+	// A bit lazy, I know - we ideally ought to commonalise
+	// the implementation. As it is, here's a copy-paste of
+	// part 1 that adds disable/enable handling.
 	for _, char := range input {
 		action, state = handleCharacter(char, state, disabled)
 		switch action {
@@ -166,29 +202,4 @@ func Day3Part2(logger *slog.Logger, input string, part1Context any) string {
 	}
 
 	return strconv.Itoa(sum)
-}
-
-// Alternative regex-based implementations, unused
-
-func Day3Part1_Regex(logger *slog.Logger, input string) (string, any) {
-	sum := 0
-	r, _ := regexp.Compile(`mul\((\d+),(\d+)\)`)
-	matches := r.FindAllStringSubmatch(input, -1)
-	for _, match := range matches {
-		operand1, _ := strconv.Atoi(match[1])
-		operand2, _ := strconv.Atoi(match[2])
-		sum += (operand1 * operand2)
-	}
-	return strconv.Itoa(sum), nil
-}
-
-func Day3Part2_Regex(logger *slog.Logger, input string, _ any) string {
-	// This doesn't work - gets the right answer with the example
-	// but the wrong answer with the real data. Upon determining that
-	// it's 10x slower than the manual parsing above anyway, I couldn't be
-	// bothered to debug.
-	r, _ := regexp.Compile(`don't\(\).*?($|do\(\))`)
-	input = r.ReplaceAllString(input, "")
-	result, _ := Day3Part1_Regex(logger, input)
-	return result
 }

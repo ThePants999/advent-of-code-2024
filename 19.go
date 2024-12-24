@@ -28,8 +28,20 @@ bbrgwb`,
 	ExamplePart2Answer: "16",
 }
 
+// Today is simply "fun with memoisation". There's a tonne
+// of combinations to try, but also massive overlap between
+// them, so caching what we've already calculated enormously
+// reduces the amount of work we need to do.
+
 var towels map[string]nothing
 var minTowelLen, maxTowelLen int
+
+// cmap.ConcurrentMap is a performant thread-safe map that
+// splits keys into a number of different ranges, and stores
+// different ranges on separate "shards". Only the one shard
+// you end up accessing needs to be locked, so different
+// threads that access different shards simultaneously
+// require no locking.
 var solutions cmap.ConcurrentMap[string, int]
 
 func Day19Part1(logger *slog.Logger, input string) (string, any) {

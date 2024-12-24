@@ -53,6 +53,10 @@ td-yn`,
 	ExamplePart2Answer: "co,de,ka,ta",
 }
 
+// Bloody Go not having a set data structure in its
+// standard library. Here's a hand-rolled set implementation.
+// "Yay."
+
 type ComputerSet map[string]*d23Computer
 
 func (set ComputerSet) Has(key string) bool {
@@ -113,6 +117,9 @@ func newComputer(name string) d23Computer {
 }
 
 func Day23Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse input. We end up with a set of computer
+	// structs, each of which knows the set of other
+	// computers it's connected to.
 	lines := strings.Fields(input)
 	computers := make(ComputerSet)
 	for _, line := range lines {
@@ -122,6 +129,10 @@ func Day23Part1(logger *slog.Logger, input string) (string, any) {
 		comp2.connections[comp1.name] = comp1
 	}
 
+	// Brute force part 1. Go through all computers starting
+	// T, then consider each of their neighbours in turn,
+	// considering each of their *other* neighbours to see if
+	// that can make a third.
 	sum := 0
 	handled := set.New()
 	for comp1Name, comp1 := range computers {
@@ -165,6 +176,11 @@ func Day23Part1(logger *slog.Logger, input string) (string, any) {
 }
 
 func Day23Part2(logger *slog.Logger, input string, part1Context any) string {
+	// For part 2, we just use
+	// https://en.wikipedia.org/wiki/Bron%E2%80%93Kerbosch_algorithm,
+	// with a slight enhancement to give up whenever we're considering
+	// a set too small to exceed the biggest clique we've already
+	// found.
 	bestSet := make(ComputerSet)
 	computers := part1Context.(ComputerSet)
 	bronKerbosch(make(ComputerSet), computers, make(ComputerSet), &bestSet)
@@ -190,6 +206,9 @@ func bronKerbosch(r ComputerSet, p ComputerSet, x ComputerSet, best *ComputerSet
 		return
 	}
 
+	// We could perhaps be more efficient with an
+	// intelligent choice of pivot, but picking
+	// an arbitrary pivot is performant enough.
 	next, stop := iter.Pull(maps.Values(p))
 	pivot, ok := next()
 	stop()

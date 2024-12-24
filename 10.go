@@ -32,6 +32,12 @@ type day10context struct {
 	trailheads []gridPos
 }
 
+// It's DFS, only allowing traversal to adjacent spaces with a
+// rating exactly one higher. Part 1 and part 2 are both DFS;
+// the difference is just whether we allow re-entry of
+// previously-visited locations. You surely don't need more
+// commenting than that ;-)
+
 func Day10Part1(logger *slog.Logger, input string) (string, any) {
 	rows := strings.Fields(input)
 	grid := make([][]int, len(rows))

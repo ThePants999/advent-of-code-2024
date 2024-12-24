@@ -80,6 +80,9 @@ type d16Node struct {
 	heapIx int
 }
 
+// Hand-rolled heap implementation, giving us a priority queue
+// we can use to run Dijkstra's algorithm.
+
 type d16Heap struct {
 	arr []*d16Node
 }

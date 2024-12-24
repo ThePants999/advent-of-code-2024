@@ -32,6 +32,9 @@ type equation struct {
 }
 
 func Day7Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse the input into a slice of equation structs,
+	// each recording both the desired result and the
+	// operands we've been given.
 	numbers := strings.Fields(input)
 	equations := make([]*equation, 0, 1000)
 	var currEq *equation
@@ -63,6 +66,8 @@ func Day7Part2(logger *slog.Logger, input string, part1Context any) string {
 }
 
 func runTest(equations []*equation, allowConcatenation bool) int {
+	// Each equation is completely independent, so farm them
+	// out to a separate goroutine each for parallel processing.
 	c := make(chan int)
 	for _, eq := range equations {
 		go func() {
@@ -74,6 +79,7 @@ func runTest(equations []*equation, allowConcatenation bool) int {
 		}()
 	}
 
+	// Collate the results.
 	sum := 0
 	for i := 0; i < len(equations); i++ {
 		sum += <-c
@@ -82,25 +88,38 @@ func runTest(equations []*equation, allowConcatenation bool) int {
 	return sum
 }
 
+// Recursive function attempting to solve _equation_.
+// Takes the cumulative value calculated so far, and
+// tries to figure out the operator before the _index_th
+// operand.
 func testEquation(eq *equation, value int, index int, allowConcatenation bool) bool {
 	if index == len(eq.operands) {
+		// We're done, so whether we're successful
+		// depends on whether the cumulative result
+		// so far equals the final result.
 		return eq.result == value
 	}
 
 	if value > eq.result {
+		// If we go past the desired result, bug out
+		// early.
 		return false
 	}
 
+	// Fork to try +...
 	newValue := value + eq.operands[index]
 	if testEquation(eq, newValue, index+1, allowConcatenation) {
 		return true
 	}
 
+	// ...and *.
 	newValue = value * eq.operands[index]
 	if testEquation(eq, newValue, index+1, allowConcatenation) {
 		return true
 	}
 
+	// And then if this is part 2, do another fork
+	// to try | as well.
 	if allowConcatenation {
 		numDigits := math.Log10(float64(eq.operands[index])) + 1
 		newValue = value * int(math.Pow10(int(numDigits)))

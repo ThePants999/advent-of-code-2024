@@ -32,6 +32,12 @@ const (
 	D21_PRESS
 )
 
+// The optimal sequence of moves to get from any given button
+// to any other given button is fixed, so we can hardcode it
+// rather than trying permutations. (That said, I deeply regret
+// not writing code to try permutations first - getting this
+// hardcoding right wasted a lot of time!)
+
 var directionDirections [5][5][]d21DirKeypadButton = [5][5][]d21DirKeypadButton{
 	// From UP
 	{
@@ -86,6 +92,17 @@ var numericDirections [11][11][]numKeypadPress = [11][11][]numKeypadPress{
 	// From 0
 	{
 		{}, // 0
+		// Why do we have these "numKeypadPress" structures instead of
+		// simply repeating the same direction like we do in the previous
+		// array? And why do we directly include PRESS at the end of each
+		// of the sequences above, but not here? No good reason, basically;
+		// I did this at a time when I *was* planning to try permutations,
+		// and wanted to simplify the code that would do so. Having to just
+		// flip two numKeypadPress{} elements is simpler than understanding
+		// that all valid permutations of "left, left, up, press" keep the
+		// two lefts consecutive and keep "press" at the end. In the end,
+		// I realised I didn't need such code, but couldn't be bothered to
+		// unwind this scheme.
 		{numKeypadPress{D21_UP, 1}, numKeypadPress{D21_LEFT, 1}},  // 1
 		{numKeypadPress{D21_UP, 1}},                               // 2
 		{numKeypadPress{D21_UP, 1}, numKeypadPress{D21_RIGHT, 1}}, // 3
@@ -255,6 +272,9 @@ func findCodeComplexity(codeStr string, dirsLevels int, c chan int) {
 	c <- number * sequenceLen
 }
 
+// Convert a sequence of numerically-encoded directions
+// to a string, primarily so it can be easily used as
+// a key in a hash map.
 func dirSeqToString(seq []d21DirKeypadButton) string {
 	runes := make([]rune, len(seq))
 	for ix, dir := range seq {

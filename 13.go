@@ -43,6 +43,7 @@ Prize: X=18641, Y=10279`,
 func Day13Part1(logger *slog.Logger, input string) (string, any) {
 	lines := strings.Split(input, "\n")
 	machines := make([]d13machine, 0, len(lines)/4+1)
+	// Input parsing.
 	// This is horrific, but it's fast ;-)
 	for ix := 0; ix < len(lines); ix += 4 {
 		machine := d13machine{}
@@ -86,6 +87,13 @@ func Day13Part1(logger *slog.Logger, input string) (string, any) {
 }
 
 func d13solve(machines []d13machine) int {
+	// Pretty trivial day tbh - the configuration
+	// of each machine boils down to a pair of
+	// simultaneous equations over a pair of variables,
+	// which have a single unique solution.
+	//
+	// The algebra was done on paper, and here's the
+	// result ;-)
 	total := 0
 	for _, machine := range machines {
 		a_presses := ((machine.prize_x * machine.b_y) - (machine.prize_y * machine.b_x)) / ((machine.a_x * machine.b_y) - (machine.a_y * machine.b_x))

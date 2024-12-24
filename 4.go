@@ -42,6 +42,8 @@ var nextLetter = map[rune]rune{
 }
 
 func Day4Part1(logger *slog.Logger, input string) (string, any) {
+	// Parse the input, building up both the
+	// full grid and also a list of Xs.
 	inputRows := strings.Fields(input)
 	grid := make([][]rune, len(inputRows))
 	xs := make([]coords, 0, len(input))
@@ -55,6 +57,9 @@ func Day4Part1(logger *slog.Logger, input string) (string, any) {
 		}
 	}
 
+	// Go through each X, and for each one, go through
+	// each of the 8 directions, looking to see if there's
+	// an M, then an A, then an S in that direction.
 	sum := 0
 	for _, x := range xs {
 		for dir := UP; dir <= UP_LEFT; dir++ {
@@ -67,11 +72,15 @@ func Day4Part1(logger *slog.Logger, input string) (string, any) {
 }
 
 func testDirection(grid [][]rune, row int, col int, dir Direction) bool {
+	// Determine what letter we're expecting next, based
+	// on what letter we've got here.
 	expectedNextLetter := nextLetter[grid[row][col]]
 	if expectedNextLetter == 0 {
 		return true
 	}
 
+	// Now determine where "next" is - the coordinates of the
+	// next square along in the specified direction.
 	newRow := row
 	if dir == UP || dir == UP_LEFT || dir == UP_RIGHT {
 		newRow -= 1
@@ -98,12 +107,16 @@ func testDirection(grid [][]rune, row int, col int, dir Direction) bool {
 	}
 
 	if expectedNextLetter == grid[newRow][newCol] {
+		// This letter was correct - recurse to check
+		// the next one.
 		return testDirection(grid, newRow, newCol, dir)
 	} else {
 		return false
 	}
 }
 
+// Determine whether a co-ordinate already determined to contain
+// an A is the center of two diagonal MASes.
 func testMAS(grid [][]rune, row int, col int) bool {
 	if ((grid[row-1][col-1] == 'M' && grid[row+1][col+1] == 'S') || (grid[row-1][col-1] == 'S' && grid[row+1][col+1] == 'M')) &&
 		((grid[row+1][col-1] == 'M' && grid[row-1][col+1] == 'S') || (grid[row+1][col-1] == 'S' && grid[row-1][col+1] == 'M')) {
@@ -113,6 +126,10 @@ func testMAS(grid [][]rune, row int, col int) bool {
 }
 
 func Day4Part2(logger *slog.Logger, input string, part1Context any) string {
+	// You'd think that we'd have built a list of As during
+	// initial grid construction. Nope, didn't bother, we'll
+	// go through the whole grid looking for them. It runs in
+	// less than 100 microseconds anyway.
 	grid := part1Context.([][]rune)
 	sum := 0
 	for rowIx := 1; rowIx < len(grid)-1; rowIx++ {

@@ -27,10 +27,25 @@ const (
 	D24_XOR
 )
 
+// What we have in here is a carefully structured set of
+// structs and relationships between them that allows us
+// to build the graph of the circuit and then achieve all
+// of (a) traversing it in any direction, (b) modifying
+// it by swapping gate outputs, and (c) efficiently
+// recalculating the value being output on the Z wires
+// after doing (b).
+//
+// That turned out to be very unnecessary ;-( but hey,
+// it's still cool, right?
+
+// Something that provides the input being sent down a
+// wire.
 type d24InputProvider interface {
 	provide() bool
 }
 
+// A constant input being sent down a wire (one of the X
+// or Y values).
 type d24FixedInput struct {
 	name   string
 	value  bool
@@ -38,9 +53,14 @@ type d24FixedInput struct {
 }
 
 func (input *d24FixedInput) provide() bool {
+	// Fixed inputs provide a constant value.
 	return input.value
 }
 
+// A wire holding a single input/output. A wire can be
+// between a fixed input and one or more downstream gates,
+// between an upstream gate and one or more downstream
+// gates, or after an upstream gate as a Z-output.
 type d24Wire struct {
 	name            string
 	provider        d24InputProvider
@@ -56,6 +76,7 @@ func (wire *d24Wire) addDownstreamGate(gate *d24Gate) {
 	wire.downstreamGates = append(wire.downstreamGates, gate)
 }
 
+// A gate. Always has two input wires and an output wire.
 type d24Gate struct {
 	operator d24Operator
 	input1N  string
@@ -67,17 +88,24 @@ type d24Gate struct {
 }
 
 func (gate *d24Gate) provide() bool {
+	// Gates provide a value determined by executing
+	// their operator over the values provided by their
+	// inputs.
 	switch gate.operator {
 	case D24_AND:
 		return gate.input1.provider.provide() && gate.input2.provider.provide()
 	case D24_OR:
 		return gate.input1.provider.provide() || gate.input2.provider.provide()
 	default:
+		// XOR
 		input1, input2 := gate.input1.provider.provide(), gate.input2.provider.provide()
 		return (input1 || input2) && !(input1 && input2)
 	}
 }
 
+// Instantiate a new gate. Will also set up any of the corresponding
+// wires that haven't already been created, as well as establishing
+// the relationships between them.
 func newGate(operator d24Operator, input1 string, input2 string, output string, wires map[string]*d24Wire) *d24Gate {
 	gate := d24Gate{operator, input1, input2, output, nil, nil, nil}
 	var found bool
@@ -107,9 +135,8 @@ func newGate(operator d24Operator, input1 string, input2 string, output string, 
 	return &gate
 }
 
+// The entire circuit
 type d24Circuit struct {
-	wires       map[string]*d24Wire
-	gates       map[string]*d24Gate
 	xInputs     []*d24FixedInput
 	yInputs     []*d24FixedInput
 	outputWires []*d24Wire
@@ -117,7 +144,13 @@ type d24Circuit struct {
 	originalZ   int64
 }
 
-func newCircuit(wires map[string]*d24Wire, gates map[string]*d24Gate, xInputs []*d24FixedInput, yInputs []*d24FixedInput) *d24Circuit {
+// Instantiate the circuit. We don't need to store
+// all the wires and gates - they continue to exist,
+// and can be found, courtesy of the connectivity
+// between all the elements. We just store the
+// externally-facing elements to facilitate
+// interaction.
+func newCircuit(wires map[string]*d24Wire, xInputs []*d24FixedInput, yInputs []*d24FixedInput) *d24Circuit {
 	outputWires := make([]*d24Wire, 64)
 	var x, y int64
 	var maxXWire, maxYWire int
@@ -143,7 +176,7 @@ func newCircuit(wires map[string]*d24Wire, gates map[string]*d24Gate, xInputs []
 		}
 	}
 
-	circuit := &d24Circuit{wires, gates, xInputs, yInputs, outputWires, x + y, 0}
+	circuit := &d24Circuit{xInputs, yInputs, outputWires, x + y, 0}
 	circuit.originalZ = circuit.zValue()
 
 	// Quick double-check of some assumptions.
@@ -168,6 +201,8 @@ func newCircuit(wires map[string]*d24Wire, gates map[string]*d24Gate, xInputs []
 	return circuit
 }
 
+// Calculate the value currently being output on the
+// z wires.
 func (circuit *d24Circuit) zValue() int64 {
 	var z int64
 	for ix := range len(circuit.xInputs) + 1 {
@@ -178,10 +213,12 @@ func (circuit *d24Circuit) zValue() int64 {
 	return z
 }
 
+// Construct the entire circuit from the day's input.
 func parseD24Input(input string) *d24Circuit {
 	lines := strings.Split(input, "\n")
 
-	// Parse the first section - wires
+	// Parse the first section - wires corresponding
+	// to fixed inputs.
 	wires := make(map[string]*d24Wire)
 	xInputs := make([]*d24FixedInput, 0, 64)
 	yInputs := make([]*d24FixedInput, 0, 64)
@@ -212,7 +249,7 @@ func parseD24Input(input string) *d24Circuit {
 		lines = lines[0 : len(lines)-1]
 	}
 
-	// Parse the second section - gates
+	// Parse the second section - gates.
 	gates := make(map[string]*d24Gate)
 	for _, line := range lines {
 		var op d24Operator
@@ -229,10 +266,12 @@ func parseD24Input(input string) *d24Circuit {
 		gates[line[postOpIndex+8:]] = newGate(op, line[0:3], line[postOpIndex+1:postOpIndex+4], line[postOpIndex+8:], wires)
 	}
 
-	return newCircuit(wires, gates, xInputs, yInputs)
+	return newCircuit(wires, xInputs, yInputs)
 }
 
 func Day24Part1(logger *slog.Logger, input string) (string, any) {
+	// Part 1 is trivial - after constructing the circuit,
+	// just return the initial Z value.
 	circuit := parseD24Input(input)
 	return strconv.Itoa(int(circuit.originalZ)), circuit
 }
@@ -243,10 +282,34 @@ func Day24Part2(logger *slog.Logger, input string, part1Context any) string {
 		return ""
 	}
 
+	// The approach we're going to take here is to firmly
+	// assume what we're told in the problem - "the system
+	// you're simulating is trying to add two binary numbers"
+	// - and, furthermore, to assume that takes a very
+	// particular form. A binary adder consists of a series
+	// of sub-circuits each designed to calculate the value
+	// of a single output bit. The sub-circuit for bit K
+	// looks like this:
+	// - The input bits X(K) and Y(K) are fed into two gates,
+	//   XOR (output 1) and AND (output 2).
+	// - Output 1 is XORed with the overflow indicator from
+	//   the previous bit to give us the actual output for
+	//   this bit, Z(K).
+	// - Output 1 is also ANDed (output 3) with the overflow
+	//   indicator from the previous bit.
+	// - Finally, output 2 is ORed with output 3 to provide
+	//   the overflow indicator for the next bit (output 4).
+	//
+	// We're going to look at each sub-circuit in turn and
+	// validate it against this pattern, identifying what's
+	// wrong if it doesn't conform.
+
 	circuit := part1Context.(*d24Circuit)
 	gatesToSwap := make([]*d24Gate, 0, 8)
 
 	for ix, xInput := range circuit.xInputs {
+		// X and Y inputs are paired together and should connect to
+		// the same downstream gates.
 		yInput := circuit.yInputs[ix]
 		if yInput.name[1:] != xInput.name[1:] {
 			panic("X and Y inputs don't match up")
@@ -259,11 +322,16 @@ func Day24Part2(logger *slog.Logger, input string, part1Context any) string {
 		}
 
 		if ix == 0 {
-			// The first input has a very different shape - we're just
-			// going to assume the problem isn't there.
+			// The first input has a very different shape, because
+			// there's no overflow indicator from the previous bit
+			// - we're just going to assume the problem isn't there,
+			// accepting we won't cope if it is.
 			continue
 		}
 
+		// The inputs should always connect to precisely two gates,
+		// one of which is XOR and the other of which is AND -
+		// validate this assumption.
 		var upperXor, upperAnd *d24Gate
 		if xInput.output.downstreamGates[0].operator == D24_XOR {
 			upperXor = xInput.output.downstreamGates[0]
@@ -330,6 +398,8 @@ func Day24Part2(logger *slog.Logger, input string, part1Context any) string {
 		}
 	}
 
+	// Let's just check this all adds up before we
+	// confidently proclaim it the final result!
 	if len(gatesToSwap) < 8 {
 		panic("Haven't found all gates to swap")
 	}
@@ -344,6 +414,8 @@ func Day24Part2(logger *slog.Logger, input string, part1Context any) string {
 		panic("Circuit still not outputting correct value after swaps")
 	}
 
+	// Output in the correct format - comma-separated,
+	// alphabetically ordered list of output names.
 	namesToSwap := make([]string, 8)
 	for ix := range 8 {
 		namesToSwap[ix] = gatesToSwap[ix].outputN

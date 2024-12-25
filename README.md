@@ -3,9 +3,9 @@ A complete set of solutions to the Advent of Code 2024 puzzles, written in Go.
 
 I used AoC this year to learn Go - I hadn't written a line of it before December 1st. So this isn't the repository to look at if you're after beautiful examples of idiomatic Go. I also haven't got the absolute best algorithm for every day; programmers who really know their algorithms could no doubt significantly improve on what's here.
 
-What I *do* have here is consistently Pretty Decent™ solutions. I set out with the goal of having a total cumulative runtime for all 25 days together of under a second, but I knocked that out of the park - I've actually managed a total runtime of under 70ms on my machine (Ryzen 5600X), with every single day executing under 10ms, and half under 1ms. There's also enough commenting that you should be able to follow what's going on. So hopefully this will be a useful repository for anyone wanting inspiration for what a Pretty Decent™ solution looks like for any given day.
+What I *do* have here is consistently Pretty Decent™ solutions. I set out with the goal of having a total cumulative runtime for all 25 days together of under a second, but I knocked that out of the park - I've actually managed a total runtime of under 60ms on my machine (Ryzen 5600X), with every single day executing under 10ms, and half under 1ms. There's also enough commenting that you should be able to follow what's going on. So hopefully this will be a useful repository for anyone wanting inspiration for what a Pretty Decent™ solution looks like for any given day.
 
-![Screenshot showing total runtime under 60ms](https://github.com/user-attachments/assets/0cfbfafb-3d25-4176-8860-446aa34ed55b)
+![Screenshot showing total runtime under 60ms](https://github.com/user-attachments/assets/b84dc8a1-55a9-42ce-897b-3d2f14bacce8)
 
 ## Framework
 
@@ -54,3 +54,4 @@ Averages over a thousand executions.
 | 22 | 7.107ms | 9.096ms |
 | 23 | 2.076ms | 2.066ms |
 | 24 | 80µs | 107µs |
+| 25 | 412µs | 319µs |
